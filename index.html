@@ -6,60 +6,60 @@
 <title>Map Chunk Tool</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#c9d1d9;height:100vh;display:flex;flex-direction:column;overflow:hidden;user-select:none}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f8;color:#1f2328;height:100vh;display:flex;flex-direction:column;overflow:hidden;user-select:none}
 
 /* ── Header ── */
-header{display:flex;align-items:center;padding:6px 12px;background:#161b22;border-bottom:1px solid #30363d;gap:8px;flex-shrink:0}
-header h1{font-size:1rem;color:#58a6ff;flex:1;white-space:nowrap}
-.btn{padding:5px 12px;border:1px solid #30363d;background:transparent;color:#8b949e;border-radius:6px;cursor:pointer;font-size:0.8rem;transition:all .15s;white-space:nowrap}
-.btn:hover{border-color:#58a6ff;color:#58a6ff}
-.btn.primary{border-color:#238636;color:#3fb950}
-.btn.primary:hover{background:#238636;color:#fff}
-.btn.active{background:#388bfd22;border-color:#58a6ff;color:#58a6ff}
-.btn.warn{border-color:#f85149;color:#f85149}
-.btn.warn:hover{background:#f8514922;border-color:#f85149}
+header{display:flex;align-items:center;padding:6px 12px;background:#ffffff;border-bottom:1px solid #d0d7de;gap:8px;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+header h1{font-size:1rem;color:#0969da;flex:1;white-space:nowrap;font-weight:700}
+.btn{padding:5px 12px;border:1px solid #d0d7de;background:#fff;color:#57606a;border-radius:6px;cursor:pointer;font-size:0.8rem;transition:all .15s;white-space:nowrap}
+.btn:hover{border-color:#0969da;color:#0969da;background:#f6f8fa}
+.btn.primary{border-color:#2da44e;background:#2da44e;color:#fff}
+.btn.primary:hover{background:#2c974b;border-color:#2c974b}
+.btn.active{background:#ddf4ff;border-color:#0969da;color:#0969da}
+.btn.warn{border-color:#cf222e;color:#cf222e}
+.btn.warn:hover{background:#ffebe9;border-color:#cf222e}
 
 /* ── Layout ── */
 .main{display:flex;flex:1;overflow:hidden;min-height:0}
 
 /* ── Sidebar ── */
-.sidebar{width:220px;flex-shrink:0;background:#161b22;border-right:1px solid #30363d;display:flex;flex-direction:column;overflow:hidden}
+.sidebar{width:220px;flex-shrink:0;background:#ffffff;border-right:1px solid #d0d7de;display:flex;flex-direction:column;overflow:hidden}
 .sidebar-scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:10px}
 .sidebar-scroll::-webkit-scrollbar{width:4px}
-.sidebar-scroll::-webkit-scrollbar-thumb{background:#30363d;border-radius:2px}
+.sidebar-scroll::-webkit-scrollbar-thumb{background:#d0d7de;border-radius:2px}
 .section{margin-bottom:14px}
-.sec-title{font-size:0.65rem;color:#8b949e;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #21262d}
+.sec-title{font-size:0.65rem;color:#57606a;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #d0d7de;font-weight:600}
 .field{margin-bottom:6px}
-.field label{font-size:0.72rem;color:#8b949e;display:block;margin-bottom:2px}
-.field input[type="number"],.field input[type="text"],.field select{width:100%;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;padding:4px 7px;border-radius:5px;font-size:0.82rem}
-.field input[type="number"]:focus,.field input[type="text"]:focus,.field select:focus{outline:none;border-color:#58a6ff}
-.field input[type="color"]{width:100%;height:28px;background:#0d1117;border:1px solid #30363d;border-radius:5px;cursor:pointer;padding:1px 2px}
+.field label{font-size:0.72rem;color:#57606a;display:block;margin-bottom:2px;font-weight:500}
+.field input[type="number"],.field input[type="text"],.field select{width:100%;background:#f6f8fa;border:1px solid #d0d7de;color:#1f2328;padding:4px 7px;border-radius:5px;font-size:0.82rem}
+.field input[type="number"]:focus,.field input[type="text"]:focus,.field select:focus{outline:none;border-color:#0969da;box-shadow:0 0 0 2px #0969da22;background:#fff}
+.field input[type="color"]{width:100%;height:28px;background:#f6f8fa;border:1px solid #d0d7de;border-radius:5px;cursor:pointer;padding:1px 2px}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .full-btn{width:100%;margin-top:4px}
 
 /* ── Chunk info card ── */
-.chunk-card{background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:9px;font-size:0.78rem}
-.chunk-card .kv{display:flex;justify-content:space-between;margin-bottom:3px;color:#8b949e}
-.chunk-card .kv span:last-child{color:#79c0ff;font-family:monospace}
+.chunk-card{background:#f6f8fa;border:1px solid #d0d7de;border-radius:6px;padding:9px;font-size:0.78rem}
+.chunk-card .kv{display:flex;justify-content:space-between;margin-bottom:3px;color:#57606a}
+.chunk-card .kv span:last-child{color:#0969da;font-family:monospace;font-weight:600}
 .corners-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:7px}
-.corner-box{background:#161b22;border:1px solid #21262d;border-radius:4px;padding:4px 6px}
-.corner-box .cl{font-size:0.62rem;color:#388bfd;margin-bottom:1px}
-.corner-box .cv{font-family:monospace;font-size:0.77rem;color:#e6edf3}
-.chunk-empty{color:#484f58;font-size:0.78rem;text-align:center;padding:8px 0}
+.corner-box{background:#fff;border:1px solid #d0d7de;border-radius:4px;padding:4px 6px}
+.corner-box .cl{font-size:0.62rem;color:#0969da;margin-bottom:1px;font-weight:600}
+.corner-box .cv{font-family:monospace;font-size:0.77rem;color:#1f2328;font-weight:600}
+.chunk-empty{color:#8c959f;font-size:0.78rem;text-align:center;padding:8px 0}
 .chunk-actions{display:flex;gap:5px;margin-top:7px}
 .chunk-actions .btn{flex:1;padding:3px 6px;font-size:0.7rem}
 
 /* ── Shape list ── */
 .shape-item{display:flex;align-items:center;gap:6px;padding:5px 5px;border-radius:5px;cursor:pointer;font-size:0.78rem;border:1px solid transparent}
-.shape-item:hover{background:#21262d}
-.shape-item.sel{border-color:#388bfd;background:#0d2137}
+.shape-item:hover{background:#f6f8fa;border-color:#d0d7de}
+.shape-item.sel{border-color:#0969da;background:#ddf4ff}
 .swatch{width:11px;height:11px;flex-shrink:0;border-radius:50%}
 .swatch.rect{border-radius:2px}
 .shape-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.shape-type{font-size:0.65rem;color:#484f58}
-.shape-del{background:none;border:none;color:#f85149;cursor:pointer;font-size:0.85rem;padding:0 2px;opacity:0;line-height:1}
+.shape-type{font-size:0.65rem;color:#8c959f}
+.shape-del{background:none;border:none;color:#cf222e;cursor:pointer;font-size:0.85rem;padding:0 2px;opacity:0;line-height:1}
 .shape-item:hover .shape-del{opacity:1}
-.shapes-empty{color:#484f58;font-size:0.78rem}
+.shapes-empty{color:#8c959f;font-size:0.78rem}
 
 /* ── Canvas wrap ── */
 .canvas-wrap{flex:1;position:relative;overflow:hidden;min-width:0}
@@ -68,24 +68,24 @@ canvas.panning{cursor:grabbing}
 canvas.drawing{cursor:crosshair}
 
 /* ── Draw mode badge ── */
-.draw-badge{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:#f0883e;color:#0d1117;padding:4px 14px;border-radius:20px;font-size:0.78rem;font-weight:700;letter-spacing:.04em;display:none;pointer-events:none}
+.draw-badge{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:#e16f24;color:#fff;padding:4px 14px;border-radius:20px;font-size:0.78rem;font-weight:700;letter-spacing:.04em;display:none;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.2)}
 .draw-badge.on{display:block}
 
 /* ── Preset modal ── */
-.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:100;display:none}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:100;display:none}
 .modal-bg.open{display:flex}
-.modal{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:18px;min-width:300px;max-width:420px;width:90%}
-.modal h2{font-size:0.95rem;color:#e6edf3;margin-bottom:12px}
+.modal{background:#ffffff;border:1px solid #d0d7de;border-radius:10px;padding:18px;min-width:300px;max-width:420px;width:90%;box-shadow:0 8px 24px rgba(0,0,0,.12)}
+.modal h2{font-size:0.95rem;color:#1f2328;margin-bottom:12px;font-weight:700}
 .modal-list{display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto;margin-bottom:12px}
-.preset-item{padding:8px 12px;border:1px solid #21262d;border-radius:6px;cursor:pointer;font-size:0.82rem;transition:all .15s}
-.preset-item:hover{border-color:#58a6ff;background:#0d2137;color:#79c0ff}
+.preset-item{padding:8px 12px;border:1px solid #d0d7de;border-radius:6px;cursor:pointer;font-size:0.82rem;transition:all .15s;color:#1f2328}
+.preset-item:hover{border-color:#0969da;background:#ddf4ff;color:#0969da}
 .modal-footer{display:flex;justify-content:flex-end;gap:8px}
-.modal-empty{color:#484f58;font-size:0.82rem;text-align:center;padding:16px}
+.modal-empty{color:#8c959f;font-size:0.82rem;text-align:center;padding:16px}
 
 /* ── Footer / status ── */
-footer{background:#161b22;border-top:1px solid #30363d;padding:3px 12px;font-size:0.72rem;color:#484f58;display:flex;gap:20px;flex-shrink:0}
+footer{background:#ffffff;border-top:1px solid #d0d7de;padding:3px 12px;font-size:0.72rem;color:#8c959f;display:flex;gap:20px;flex-shrink:0}
 footer span{font-family:monospace}
-footer span b{color:#8b949e}
+footer span b{color:#57606a}
 </style>
 </head>
 <body>
@@ -123,7 +123,7 @@ footer span b{color:#8b949e}
 
       <!-- Add Shape -->
       <div class="section">
-        <div class="sec-title">Add Shape</div>
+        <div class="sec-title" id="shapeSectionTitle">Add Shape</div>
         <div class="field">
           <label>Type</label>
           <select id="shapeType">
@@ -166,7 +166,8 @@ footer span b{color:#8b949e}
           <button class="btn" id="btnDrawMode" style="flex:1">Draw on Map</button>
           <button class="btn primary" id="btnAddShape" style="flex:1">Add</button>
         </div>
-        <div style="font-size:0.68rem;color:#484f58;margin-top:5px">Tip: drag on map to draw, or enter coords and click Add</div>
+        <button class="btn" id="btnNewShape" style="width:100%;margin-top:5px;display:none">+ New Shape</button>
+        <div id="shapeFormHint" style="font-size:0.68rem;color:#8c959f;margin-top:5px">Tip: drag on map to draw, or enter coords and click Add</div>
       </div>
 
       <!-- Shape List -->
@@ -233,6 +234,9 @@ const S = {
   selChunk: null,      // {cx, cz}
   selShape: null,      // index
 
+  // form state
+  editMode: false,
+
   // data
   shapes: [],
 };
@@ -280,7 +284,7 @@ function render() {
   const W = canvas.width, H = canvas.height;
   ctx.clearRect(0, 0, W, H);
 
-  ctx.fillStyle = '#0d1117';
+  ctx.fillStyle = '#e8eef4';
   ctx.fillRect(0, 0, W, H);
 
   const tl = s2w(0, 0);
@@ -314,7 +318,7 @@ function drawGrid(tl, br, W, H) {
 
   // Chunk lines (only when visible enough)
   if (cpx >= 3) {
-    ctx.strokeStyle = '#161b22';
+    ctx.strokeStyle = '#b8c8d8';
     ctx.lineWidth   = 1;
     ctx.beginPath();
     for (let cx = cxA; cx <= cxB; cx++) {
@@ -336,7 +340,7 @@ function drawGrid(tl, br, W, H) {
   const rzA = Math.floor(czA / 32);
   const rzB = Math.ceil (czB / 32);
 
-  ctx.strokeStyle = '#21262d';
+  ctx.strokeStyle = '#7090b0';
   ctx.lineWidth   = rpx >= 8 ? 2 : 1;
   ctx.beginPath();
   for (let rx = rxA; rx <= rxB; rx++) {
@@ -355,7 +359,7 @@ function drawGrid(tl, br, W, H) {
     ctx.font          = `${fs}px monospace`;
     ctx.textAlign     = 'left';
     ctx.textBaseline  = 'top';
-    ctx.fillStyle     = '#21262d';
+    ctx.fillStyle     = '#4a6080';
     for (let cx = cxA; cx <= cxB; cx++) {
       for (let cz = czA; cz <= czB; cz++) {
         const s = w2s(cx * CHUNK, cz * CHUNK);
@@ -370,7 +374,7 @@ function drawGrid(tl, br, W, H) {
     ctx.font          = `bold ${fs}px monospace`;
     ctx.textAlign     = 'left';
     ctx.textBaseline  = 'top';
-    ctx.fillStyle     = '#30363d';
+    ctx.fillStyle     = '#2d5080';
     for (let rx = rxA; rx <= rxB; rx++) {
       for (let rz = rzA; rz <= rzB; rz++) {
         const s = w2s(rx * REGION, rz * REGION);
@@ -405,9 +409,9 @@ function drawSelChunk(cx, cz) {
   const s1 = w2s(x1, z1), s2 = w2s(x2, z2);
   const sw = s2.x - s1.x, sh = s2.y - s1.y;
 
-  ctx.fillStyle   = 'rgba(56,139,253,0.12)';
+  ctx.fillStyle   = 'rgba(9,105,218,0.1)';
   ctx.fillRect(s1.x, s1.y, sw, sh);
-  ctx.strokeStyle = '#388bfd';
+  ctx.strokeStyle = '#0969da';
   ctx.lineWidth   = 2;
   ctx.strokeRect(s1.x, s1.y, sw, sh);
 
@@ -420,7 +424,7 @@ function drawSelChunk(cx, cz) {
   ];
   corners.forEach(c => {
     const sc = w2s(c.wx + 0.5, c.wz + 0.5);
-    ctx.fillStyle = '#f0883e';
+    ctx.fillStyle = '#e16f24';
     ctx.beginPath();
     ctx.arc(sc.x, sc.y, Math.min(5, S.zoom * 0.4), 0, Math.PI * 2);
     ctx.fill();
@@ -489,7 +493,7 @@ function shapeLabel(name, sx, sy, color) {
   ctx.font          = `bold ${fs}px sans-serif`;
   ctx.textAlign     = 'center';
   ctx.textBaseline  = 'middle';
-  ctx.fillStyle     = 'rgba(0,0,0,0.7)';
+  ctx.fillStyle     = 'rgba(255,255,255,0.8)';
   ctx.fillText(name, sx + 1, sy + 1);
   ctx.fillStyle     = color;
   ctx.fillText(name, sx, sy);
@@ -543,6 +547,8 @@ canvas.addEventListener('mousedown', e => {
         if (shapeHit(S.shapes[i], w.x, w.z)) { hit = i; break; }
       }
       S.selShape = hit;
+      if (hit !== null) loadShapeIntoForm(S.shapes[hit]);
+      else if (S.editMode) resetShapeForm();
       updateShapeList();
       render();
     }
@@ -743,7 +749,7 @@ function finishDraw() {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//  Add shape from form
+//  Add / Update shape from form
 // ════════════════════════════════════════════════════════════════════════════
 document.getElementById('btnAddShape').addEventListener('click', () => {
   const type  = document.getElementById('shapeType').value;
@@ -767,11 +773,63 @@ document.getElementById('btnAddShape').addEventListener('click', () => {
     };
   }
 
-  S.shapes.push(sh);
-  S.selShape = S.shapes.length - 1;
+  if (S.editMode && S.selShape !== null) {
+    // Update existing shape in-place
+    S.shapes[S.selShape] = sh;
+  } else {
+    // Add new shape
+    S.shapes.push(sh);
+    S.selShape = S.shapes.length - 1;
+  }
+
   updateShapeList();
   render();
 });
+
+document.getElementById('btnNewShape').addEventListener('click', resetShapeForm);
+
+function resetShapeForm() {
+  S.editMode = false;
+  document.getElementById('shapeSectionTitle').textContent = 'Add Shape';
+  document.getElementById('btnAddShape').textContent = 'Add';
+  document.getElementById('btnNewShape').style.display = 'none';
+  document.getElementById('shapeFormHint').style.display = '';
+  document.getElementById('shapeName').value  = '';
+  document.getElementById('shapeColor').value = '#388bfd';
+  document.getElementById('shapeFill').value  = '0.3';
+  document.getElementById('shapeType').value  = 'rect';
+  document.getElementById('sx1').value = 0; document.getElementById('sz1').value = 0;
+  document.getElementById('sx2').value = 32; document.getElementById('sz2').value = 32;
+  document.getElementById('rectFields').style.display   = '';
+  document.getElementById('circleFields').style.display = 'none';
+}
+
+function loadShapeIntoForm(sh) {
+  S.editMode = true;
+  document.getElementById('shapeSectionTitle').textContent = 'Edit Shape';
+  document.getElementById('btnAddShape').textContent = 'Update';
+  document.getElementById('btnNewShape').style.display = '';
+  document.getElementById('shapeFormHint').style.display = 'none';
+
+  document.getElementById('shapeType').value  = sh.type;
+  document.getElementById('shapeName').value  = sh.name;
+  document.getElementById('shapeColor').value = sh.color;
+  document.getElementById('shapeFill').value  = sh.fill ?? '0.3';
+
+  document.getElementById('rectFields').style.display   = sh.type === 'rect'   ? '' : 'none';
+  document.getElementById('circleFields').style.display = sh.type === 'circle' ? '' : 'none';
+
+  if (sh.type === 'rect') {
+    document.getElementById('sx1').value = sh.x1;
+    document.getElementById('sz1').value = sh.z1;
+    document.getElementById('sx2').value = sh.x2;
+    document.getElementById('sz2').value = sh.z2;
+  } else {
+    document.getElementById('scx').value = sh.cx;
+    document.getElementById('scz').value = sh.cz;
+    document.getElementById('sr').value  = sh.r;
+  }
+}
 
 // ════════════════════════════════════════════════════════════════════════════
 //  Shape list UI
@@ -798,12 +856,14 @@ function selectShape(i) {
   const sh = S.shapes[i];
   if (sh.type === 'rect') { S.cx = (sh.x1+sh.x2)/2; S.cz = (sh.z1+sh.z2)/2; }
   else                    { S.cx = sh.cx;             S.cz = sh.cz;             }
+  loadShapeIntoForm(sh);
   render();
 }
 
 function deleteShape(i) {
   S.shapes.splice(i, 1);
   if (S.selShape !== null && S.selShape >= S.shapes.length) S.selShape = null;
+  if (S.editMode) resetShapeForm();
   updateShapeList();
   render();
 }
