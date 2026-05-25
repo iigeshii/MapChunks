@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Map Chunk Tool</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#c9d1d9;height:100vh;display:flex;flex-direction:column;overflow:hidden;user-select:none}
+
+/* ── Header ── */
+header{display:flex;align-items:center;padding:6px 12px;background:#161b22;border-bottom:1px solid #30363d;gap:8px;flex-shrink:0}
+header h1{font-size:1rem;color:#58a6ff;flex:1;white-space:nowrap}
+.btn{padding:5px 12px;border:1px solid #30363d;background:transparent;color:#8b949e;border-radius:6px;cursor:pointer;font-size:0.8rem;transition:all .15s;white-space:nowrap}
+.btn:hover{border-color:#58a6ff;color:#58a6ff}
+.btn.primary{border-color:#238636;color:#3fb950}
+.btn.primary:hover{background:#238636;color:#fff}
+.btn.active{background:#388bfd22;border-color:#58a6ff;color:#58a6ff}
+.btn.warn{border-color:#f85149;color:#f85149}
+.btn.warn:hover{background:#f8514922;border-color:#f85149}
+
+/* ── Layout ── */
+.main{display:flex;flex:1;overflow:hidden;min-height:0}
+
+/* ── Sidebar ── */
+.sidebar{width:220px;flex-shrink:0;background:#161b22;border-right:1px solid #30363d;display:flex;flex-direction:column;overflow:hidden}
+.sidebar-scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:10px}
+.sidebar-scroll::-webkit-scrollbar{width:4px}
+.sidebar-scroll::-webkit-scrollbar-thumb{background:#30363d;border-radius:2px}
+.section{margin-bottom:14px}
+.sec-title{font-size:0.65rem;color:#8b949e;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #21262d}
+.field{margin-bottom:6px}
+.field label{font-size:0.72rem;color:#8b949e;display:block;margin-bottom:2px}
+.field input[type="number"],.field input[type="text"],.field select{width:100%;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;padding:4px 7px;border-radius:5px;font-size:0.82rem}
+.field input[type="number"]:focus,.field input[type="text"]:focus,.field select:focus{outline:none;border-color:#58a6ff}
+.field input[type="color"]{width:100%;height:28px;background:#0d1117;border:1px solid #30363d;border-radius:5px;cursor:pointer;padding:1px 2px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.full-btn{width:100%;margin-top:4px}
+
+/* ── Chunk info card ── */
+.chunk-card{background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:9px;font-size:0.78rem}
+.chunk-card .kv{display:flex;justify-content:space-between;margin-bottom:3px;color:#8b949e}
+.chunk-card .kv span:last-child{color:#79c0ff;font-family:monospace}
+.corners-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:7px}
+.corner-box{background:#161b22;border:1px solid #21262d;border-radius:4px;padding:4px 6px}
+.corner-box .cl{font-size:0.62rem;color:#388bfd;margin-bottom:1px}
+.corner-box .cv{font-family:monospace;font-size:0.77rem;color:#e6edf3}
+.chunk-empty{color:#484f58;font-size:0.78rem;text-align:center;padding:8px 0}
+.chunk-actions{display:flex;gap:5px;margin-top:7px}
+.chunk-actions .btn{flex:1;padding:3px 6px;font-size:0.7rem}
+
+/* ── Shape list ── */
+.shape-item{display:flex;align-items:center;gap:6px;padding:5px 5px;border-radius:5px;cursor:pointer;font-size:0.78rem;border:1px solid transparent}
+.shape-item:hover{background:#21262d}
+.shape-item.sel{border-color:#388bfd;background:#0d2137}
+.swatch{width:11px;height:11px;flex-shrink:0;border-radius:50%}
+.swatch.rect{border-radius:2px}
+.shape-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shape-type{font-size:0.65rem;color:#484f58}
+.shape-del{background:none;border:none;color:#f85149;cursor:pointer;font-size:0.85rem;padding:0 2px;opacity:0;line-height:1}
+.shape-item:hover .shape-del{opacity:1}
+.shapes-empty{color:#484f58;font-size:0.78rem}
+
+/* ── Canvas wrap ── */
+.canvas-wrap{flex:1;position:relative;overflow:hidden;min-width:0}
+canvas{display:block;width:100%;height:100%;cursor:crosshair}
+canvas.panning{cursor:grabbing}
+canvas.drawing{cursor:crosshair}
+
+/* ── Draw mode badge ── */
+.draw-badge{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:#f0883e;color:#0d1117;padding:4px 14px;border-radius:20px;font-size:0.78rem;font-weight:700;letter-spacing:.04em;display:none;pointer-events:none}
+.draw-badge.on{display:block}
+
+/* ── Preset modal ── */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:100;display:none}
+.modal-bg.open{display:flex}
+.modal{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:18px;min-width:300px;max-width:420px;width:90%}
+.modal h2{font-size:0.95rem;color:#e6edf3;margin-bottom:12px}
+.modal-list{display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto;margin-bottom:12px}
+.preset-item{padding:8px 12px;border:1px solid #21262d;border-radius:6px;cursor:pointer;font-size:0.82rem;transition:all .15s}
+.preset-item:hover{border-color:#58a6ff;background:#0d2137;color:#79c0ff}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px}
+.modal-empty{color:#484f58;font-size:0.82rem;text-align:center;padding:16px}
+
+/* ── Footer / status ── */
+footer{background:#161b22;border-top:1px solid #30363d;padding:3px 12px;font-size:0.72rem;color:#484f58;display:flex;gap:20px;flex-shrink:0}
+footer span{font-family:monospace}
+footer span b{color:#8b949e}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Map Chunk Tool</h1>
+  <button class="btn" id="btnPresets">Presets</button>
+  <input type="file" id="fileInput" accept=".json" style="display:none">
+  <button class="btn" id="btnImport">Import JSON</button>
+  <button class="btn primary" id="btnExport">Export JSON</button>
+</header>
+
+<div class="main">
+  <!-- ── Sidebar ── -->
+  <div class="sidebar">
+    <div class="sidebar-scroll">
+
+      <!-- Navigate -->
+      <div class="section">
+        <div class="sec-title">Navigate to Coordinate</div>
+        <div class="row2">
+          <div class="field"><label>X</label><input type="number" id="gotoX" value="0"></div>
+          <div class="field"><label>Z</label><input type="number" id="gotoZ" value="0"></div>
+        </div>
+        <button class="btn full-btn" id="btnGoto">Go to Coordinates</button>
+      </div>
+
+      <!-- Selected Chunk -->
+      <div class="section">
+        <div class="sec-title">Selected Chunk</div>
+        <div class="chunk-card" id="chunkCard">
+          <div class="chunk-empty">Click a chunk to select it</div>
+        </div>
+      </div>
+
+      <!-- Add Shape -->
+      <div class="section">
+        <div class="sec-title">Add Shape</div>
+        <div class="field">
+          <label>Type</label>
+          <select id="shapeType">
+            <option value="rect">Rectangle</option>
+            <option value="circle">Circle</option>
+          </select>
+        </div>
+        <div class="field"><label>Name</label><input type="text" id="shapeName" placeholder="My Base"></div>
+        <div class="field"><label>Color</label><input type="color" id="shapeColor" value="#388bfd"></div>
+        <div class="field"><label>Fill opacity</label>
+          <select id="shapeFill">
+            <option value="0.15">Light</option>
+            <option value="0.3" selected>Medium</option>
+            <option value="0.5">Dark</option>
+            <option value="0">Outline only</option>
+          </select>
+        </div>
+
+        <!-- Rect coords -->
+        <div id="rectFields">
+          <div class="row2">
+            <div class="field"><label>X1</label><input type="number" id="sx1" value="0"></div>
+            <div class="field"><label>Z1</label><input type="number" id="sz1" value="0"></div>
+          </div>
+          <div class="row2">
+            <div class="field"><label>X2</label><input type="number" id="sx2" value="32"></div>
+            <div class="field"><label>Z2</label><input type="number" id="sz2" value="32"></div>
+          </div>
+        </div>
+        <!-- Circle coords -->
+        <div id="circleFields" style="display:none">
+          <div class="row2">
+            <div class="field"><label>CX</label><input type="number" id="scx" value="0"></div>
+            <div class="field"><label>CZ</label><input type="number" id="scz" value="0"></div>
+          </div>
+          <div class="field"><label>Radius</label><input type="number" id="sr" value="16"></div>
+        </div>
+
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <button class="btn" id="btnDrawMode" style="flex:1">Draw on Map</button>
+          <button class="btn primary" id="btnAddShape" style="flex:1">Add</button>
+        </div>
+        <div style="font-size:0.68rem;color:#484f58;margin-top:5px">Tip: drag on map to draw, or enter coords and click Add</div>
+      </div>
+
+      <!-- Shape List -->
+      <div class="section">
+        <div class="sec-title">Shapes</div>
+        <div id="shapeList"><div class="shapes-empty">No shapes yet</div></div>
+      </div>
+
+    </div><!-- /sidebar-scroll -->
+  </div><!-- /sidebar -->
+
+  <!-- ── Canvas ── -->
+  <div class="canvas-wrap" id="canvasWrap">
+    <canvas id="mapCanvas"></canvas>
+    <div class="draw-badge" id="drawBadge">DRAW MODE — drag to place shape · ESC to cancel</div>
+  </div>
+</div>
+
+<!-- ── Preset modal ── -->
+<div class="modal-bg" id="presetModal">
+  <div class="modal">
+    <h2>Load Preset</h2>
+    <div class="modal-list" id="presetList"></div>
+    <div class="modal-footer">
+      <button class="btn" id="btnModalClose">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <span id="stCursor"><b>Cursor:</b> —</span>
+  <span id="stChunk"><b>Chunk:</b> —</span>
+  <span id="stRegion"><b>Region:</b> —</span>
+  <span id="stZoom"><b>Zoom:</b> —</span>
+  <span style="margin-left:auto;color:#21262d">Right-drag or middle-drag to pan · Scroll to zoom · Click chunk to select</span>
+</footer>
+
+<script>
+// ════════════════════════════════════════════════════════════════════════════
+//  Constants
+// ════════════════════════════════════════════════════════════════════════════
+const CHUNK  = 16;
+const REGION = 512;
+
+// ════════════════════════════════════════════════════════════════════════════
+//  State
+// ════════════════════════════════════════════════════════════════════════════
+const S = {
+  // view
+  cx: 0, cz: 0,       // world coord at canvas center
+  zoom: 5,             // pixels per world unit
+
+  // interaction
+  panning: false,
+  panStart: null,
+  panOrigin: null,
+
+  drawMode: false,
+  drawing: false,
+  drawP1: null,
+  drawP2: null,
+
+  // selection
+  selChunk: null,      // {cx, cz}
+  selShape: null,      // index
+
+  // data
+  shapes: [],
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Canvas
+// ════════════════════════════════════════════════════════════════════════════
+const canvas = document.getElementById('mapCanvas');
+const ctx    = canvas.getContext('2d');
+const wrap   = document.getElementById('canvasWrap');
+
+function resizeCanvas() {
+  canvas.width  = wrap.clientWidth;
+  canvas.height = wrap.clientHeight;
+  render();
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Coordinate helpers
+// ════════════════════════════════════════════════════════════════════════════
+function w2s(wx, wz) {
+  return {
+    x: (wx - S.cx) * S.zoom + canvas.width  / 2,
+    y: (wz - S.cz) * S.zoom + canvas.height / 2,
+  };
+}
+
+function s2w(sx, sy) {
+  return {
+    x: (sx - canvas.width  / 2) / S.zoom + S.cx,
+    z: (sy - canvas.height / 2) / S.zoom + S.cz,
+  };
+}
+
+function chunkOf(wx, wz) {
+  return { cx: Math.floor(wx / CHUNK), cz: Math.floor(wz / CHUNK) };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Render
+// ════════════════════════════════════════════════════════════════════════════
+function render() {
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  ctx.fillStyle = '#0d1117';
+  ctx.fillRect(0, 0, W, H);
+
+  const tl = s2w(0, 0);
+  const br = s2w(W, H);
+
+  drawGrid(tl, br, W, H);
+
+  // Shapes (back to front, selected last)
+  S.shapes.forEach((sh, i) => { if (i !== S.selShape) drawShape(sh, false); });
+  if (S.selShape !== null && S.shapes[S.selShape]) drawShape(S.shapes[S.selShape], true);
+
+  // In-progress draw preview
+  if (S.drawing && S.drawP1 && S.drawP2) drawPreview();
+
+  // Selected chunk
+  if (S.selChunk) drawSelChunk(S.selChunk.cx, S.selChunk.cz);
+
+  // Origin marker
+  drawOrigin();
+}
+
+// ── Grid ─────────────────────────────────────────────────────────────────
+function drawGrid(tl, br, W, H) {
+  const cpx = CHUNK  * S.zoom;  // pixels per chunk
+  const rpx = REGION * S.zoom;  // pixels per region
+
+  const cxA = Math.floor(tl.x / CHUNK) - 1;
+  const cxB = Math.ceil (br.x / CHUNK) + 1;
+  const czA = Math.floor(tl.z / CHUNK) - 1;
+  const czB = Math.ceil (br.z / CHUNK) + 1;
+
+  // Chunk lines (only when visible enough)
+  if (cpx >= 3) {
+    ctx.strokeStyle = '#161b22';
+    ctx.lineWidth   = 1;
+    ctx.beginPath();
+    for (let cx = cxA; cx <= cxB; cx++) {
+      if (cx % 32 === 0) continue;
+      const sx = w2s(cx * CHUNK, 0).x;
+      ctx.moveTo(sx, 0); ctx.lineTo(sx, H);
+    }
+    for (let cz = czA; cz <= czB; cz++) {
+      if (cz % 32 === 0) continue;
+      const sy = w2s(0, cz * CHUNK).y;
+      ctx.moveTo(0, sy); ctx.lineTo(W, sy);
+    }
+    ctx.stroke();
+  }
+
+  // Region lines (always visible)
+  const rxA = Math.floor(cxA / 32);
+  const rxB = Math.ceil (cxB / 32);
+  const rzA = Math.floor(czA / 32);
+  const rzB = Math.ceil (czB / 32);
+
+  ctx.strokeStyle = '#21262d';
+  ctx.lineWidth   = rpx >= 8 ? 2 : 1;
+  ctx.beginPath();
+  for (let rx = rxA; rx <= rxB; rx++) {
+    const sx = w2s(rx * REGION, 0).x;
+    ctx.moveTo(sx, 0); ctx.lineTo(sx, H);
+  }
+  for (let rz = rzA; rz <= rzB; rz++) {
+    const sy = w2s(0, rz * REGION).y;
+    ctx.moveTo(0, sy); ctx.lineTo(W, sy);
+  }
+  ctx.stroke();
+
+  // Chunk labels when zoomed in enough
+  if (cpx >= 36) {
+    const fs = Math.min(11, cpx * 0.35);
+    ctx.font          = `${fs}px monospace`;
+    ctx.textAlign     = 'left';
+    ctx.textBaseline  = 'top';
+    ctx.fillStyle     = '#21262d';
+    for (let cx = cxA; cx <= cxB; cx++) {
+      for (let cz = czA; cz <= czB; cz++) {
+        const s = w2s(cx * CHUNK, cz * CHUNK);
+        ctx.fillText(`${cx},${cz}`, s.x + 2, s.y + 2);
+      }
+    }
+  }
+
+  // Region labels
+  if (rpx >= 60) {
+    const fs = Math.min(13, rpx * 0.04);
+    ctx.font          = `bold ${fs}px monospace`;
+    ctx.textAlign     = 'left';
+    ctx.textBaseline  = 'top';
+    ctx.fillStyle     = '#30363d';
+    for (let rx = rxA; rx <= rxB; rx++) {
+      for (let rz = rzA; rz <= rzB; rz++) {
+        const s = w2s(rx * REGION, rz * REGION);
+        ctx.fillText(`r.${rx}.${rz}`, s.x + 4, s.y + 4);
+      }
+    }
+  }
+}
+
+// ── Origin ───────────────────────────────────────────────────────────────
+function drawOrigin() {
+  const s = w2s(0, 0);
+  if (s.x < -20 || s.x > canvas.width + 20 || s.y < -20 || s.y > canvas.height + 20) return;
+  ctx.strokeStyle = '#f85149';
+  ctx.lineWidth   = 2;
+  const r = 7;
+  ctx.beginPath();
+  ctx.moveTo(s.x - r, s.y); ctx.lineTo(s.x + r, s.y);
+  ctx.moveTo(s.x, s.y - r); ctx.lineTo(s.x, s.y + r);
+  ctx.stroke();
+  ctx.fillStyle     = '#f85149';
+  ctx.font          = '10px monospace';
+  ctx.textAlign     = 'left';
+  ctx.textBaseline  = 'bottom';
+  ctx.fillText('0,0', s.x + 3, s.y - 1);
+}
+
+// ── Selected chunk ────────────────────────────────────────────────────────
+function drawSelChunk(cx, cz) {
+  const x1 = cx * CHUNK,       z1 = cz * CHUNK;
+  const x2 = x1 + CHUNK,       z2 = z1 + CHUNK;
+  const s1 = w2s(x1, z1), s2 = w2s(x2, z2);
+  const sw = s2.x - s1.x, sh = s2.y - s1.y;
+
+  ctx.fillStyle   = 'rgba(56,139,253,0.12)';
+  ctx.fillRect(s1.x, s1.y, sw, sh);
+  ctx.strokeStyle = '#388bfd';
+  ctx.lineWidth   = 2;
+  ctx.strokeRect(s1.x, s1.y, sw, sh);
+
+  // Corner markers at the 4 inside-corner block positions
+  const corners = [
+    {wx: x1,      wz: z1},
+    {wx: x2 - 1,  wz: z1},
+    {wx: x1,      wz: z2 - 1},
+    {wx: x2 - 1,  wz: z2 - 1},
+  ];
+  corners.forEach(c => {
+    const sc = w2s(c.wx + 0.5, c.wz + 0.5);
+    ctx.fillStyle = '#f0883e';
+    ctx.beginPath();
+    ctx.arc(sc.x, sc.y, Math.min(5, S.zoom * 0.4), 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+// ── Shapes ────────────────────────────────────────────────────────────────
+function drawShape(sh, selected) {
+  const alpha   = parseFloat(sh.fill ?? 0.3);
+  const lw      = selected ? 2.5 : 1.5;
+
+  if (sh.type === 'rect') {
+    const s1 = w2s(sh.x1, sh.z1), s2 = w2s(sh.x2, sh.z2);
+    const sw = s2.x - s1.x, sh2 = s2.y - s1.y;
+    ctx.fillStyle   = hex2rgba(sh.color, alpha);
+    ctx.fillRect(s1.x, s1.y, sw, sh2);
+    ctx.strokeStyle = sh.color;
+    ctx.lineWidth   = lw;
+    if (selected) { ctx.setLineDash([5,3]); }
+    ctx.strokeRect(s1.x, s1.y, sw, sh2);
+    ctx.setLineDash([]);
+    shapeLabel(sh.name, (s1.x + s2.x) / 2, (s1.y + s2.y) / 2, sh.color);
+  } else {
+    const sc = w2s(sh.cx, sh.cz);
+    const sr = sh.r * S.zoom;
+    ctx.fillStyle   = hex2rgba(sh.color, alpha);
+    ctx.beginPath();
+    ctx.arc(sc.x, sc.y, sr, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = sh.color;
+    ctx.lineWidth   = lw;
+    if (selected) { ctx.setLineDash([5,3]); }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    shapeLabel(sh.name, sc.x, sc.y, sh.color);
+  }
+}
+
+function drawPreview() {
+  const type  = document.getElementById('shapeType').value;
+  const color = document.getElementById('shapeColor').value;
+  ctx.setLineDash([6, 4]);
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = 1.5;
+  ctx.fillStyle   = hex2rgba(color, 0.15);
+
+  if (type === 'rect') {
+    const s1 = w2s(S.drawP1.x, S.drawP1.z), s2 = w2s(S.drawP2.x, S.drawP2.z);
+    ctx.fillRect(s1.x, s1.y, s2.x - s1.x, s2.y - s1.y);
+    ctx.strokeRect(s1.x, s1.y, s2.x - s1.x, s2.y - s1.y);
+  } else {
+    const sc = w2s(S.drawP1.x, S.drawP1.z);
+    const dx = S.drawP2.x - S.drawP1.x, dz = S.drawP2.z - S.drawP1.z;
+    const r  = Math.hypot(dx, dz) * S.zoom;
+    ctx.beginPath();
+    ctx.arc(sc.x, sc.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+}
+
+function shapeLabel(name, sx, sy, color) {
+  if (!name) return;
+  const fs = Math.max(10, Math.min(13, S.zoom * 1.2));
+  ctx.font          = `bold ${fs}px sans-serif`;
+  ctx.textAlign     = 'center';
+  ctx.textBaseline  = 'middle';
+  ctx.fillStyle     = 'rgba(0,0,0,0.7)';
+  ctx.fillText(name, sx + 1, sy + 1);
+  ctx.fillStyle     = color;
+  ctx.fillText(name, sx, sy);
+}
+
+function hex2rgba(hex, a) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Mouse events
+// ════════════════════════════════════════════════════════════════════════════
+function canvasXY(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+canvas.addEventListener('mousedown', e => {
+  const pos = canvasXY(e);
+
+  // Middle or right button → pan
+  if (e.button === 1 || e.button === 2) {
+    S.panning    = true;
+    S.panStart   = pos;
+    S.panOrigin  = { cx: S.cx, cz: S.cz };
+    canvas.classList.add('panning');
+    return;
+  }
+
+  // Left button
+  if (e.button === 0) {
+    if (S.drawMode) {
+      const w = s2w(pos.x, pos.y);
+      S.drawing = true;
+      S.drawP1  = w;
+      S.drawP2  = w;
+    } else {
+      // Select chunk
+      const w = s2w(pos.x, pos.y);
+      const c = chunkOf(w.x, w.z);
+      S.selChunk = c;
+      updateChunkCard();
+      // Hit-test shapes (top-most first)
+      let hit = null;
+      for (let i = S.shapes.length - 1; i >= 0; i--) {
+        if (shapeHit(S.shapes[i], w.x, w.z)) { hit = i; break; }
+      }
+      S.selShape = hit;
+      updateShapeList();
+      render();
+    }
+  }
+});
+
+canvas.addEventListener('mousemove', e => {
+  const pos = canvasXY(e);
+  const w   = s2w(pos.x, pos.y);
+  const c   = chunkOf(w.x, w.z);
+  const rx  = Math.floor(c.cx / 32);
+  const rz  = Math.floor(c.cz / 32);
+
+  document.getElementById('stCursor').innerHTML  = `<b>Cursor:</b> ${Math.floor(w.x)}, ${Math.floor(w.z)}`;
+  document.getElementById('stChunk').innerHTML   = `<b>Chunk:</b> ${c.cx}, ${c.cz}`;
+  document.getElementById('stRegion').innerHTML  = `<b>Region:</b> r.${rx}.${rz}`;
+
+  if (S.panning) {
+    const dx = (pos.x - S.panStart.x) / S.zoom;
+    const dz = (pos.y - S.panStart.y) / S.zoom;
+    S.cx = S.panOrigin.cx - dx;
+    S.cz = S.panOrigin.cz - dz;
+    render();
+    return;
+  }
+
+  if (S.drawing) {
+    S.drawP2 = s2w(pos.x, pos.y);
+    render();
+  }
+});
+
+canvas.addEventListener('mouseup', e => {
+  if (S.panning) {
+    S.panning = false;
+    canvas.classList.remove('panning');
+  }
+  if (S.drawing && e.button === 0) {
+    S.drawing = false;
+    if (S.drawP1 && S.drawP2) finishDraw();
+    S.drawP1 = S.drawP2 = null;
+    render();
+  }
+});
+
+canvas.addEventListener('mouseleave', () => {
+  if (S.panning) { S.panning = false; canvas.classList.remove('panning'); }
+  if (S.drawing) { S.drawing = false; S.drawP1 = S.drawP2 = null; render(); }
+});
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const pos = canvasXY(e);
+  const wBefore = s2w(pos.x, pos.y);
+  const factor  = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+  S.zoom = Math.max(0.08, Math.min(80, S.zoom * factor));
+  const wAfter = s2w(pos.x, pos.y);
+  S.cx += wBefore.x - wAfter.x;
+  S.cz += wBefore.z - wAfter.z;
+  document.getElementById('stZoom').innerHTML = `<b>Zoom:</b> ${S.zoom.toFixed(2)}px/u`;
+  render();
+}, { passive: false });
+
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && S.drawMode) exitDrawMode();
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Chunk card
+// ════════════════════════════════════════════════════════════════════════════
+function updateChunkCard() {
+  const card = document.getElementById('chunkCard');
+  if (!S.selChunk) {
+    card.innerHTML = '<div class="chunk-empty">Click a chunk to select it</div>';
+    return;
+  }
+  const { cx, cz } = S.selChunk;
+  const x1 = cx * CHUNK, z1 = cz * CHUNK;
+  const x2 = x1 + CHUNK - 1, z2 = z1 + CHUNK - 1;
+
+  card.innerHTML = `
+    <div class="kv"><span>Chunk</span><span>(${cx}, ${cz})</span></div>
+    <div class="kv"><span>Region</span><span>r.${Math.floor(cx/32)}.${Math.floor(cz/32)}</span></div>
+    <div class="kv"><span>X range</span><span>${x1} … ${x2}</span></div>
+    <div class="kv"><span>Z range</span><span>${z1} … ${z2}</span></div>
+    <div style="font-size:0.65rem;color:#388bfd;margin-top:7px;margin-bottom:3px">Inside Corners</div>
+    <div class="corners-grid">
+      <div class="corner-box"><div class="cl">NW ↖</div><div class="cv">${x1}, ${z1}</div></div>
+      <div class="corner-box"><div class="cl">NE ↗</div><div class="cv">${x2}, ${z1}</div></div>
+      <div class="corner-box"><div class="cl">SW ↙</div><div class="cv">${x1}, ${z2}</div></div>
+      <div class="corner-box"><div class="cl">SE ↘</div><div class="cv">${x2}, ${z2}</div></div>
+    </div>
+    <div class="chunk-actions">
+      <button class="btn" onclick="copyChunk()">Copy</button>
+      <button class="btn" onclick="centerChunk()">Center</button>
+    </div>`;
+}
+
+function copyChunk() {
+  if (!S.selChunk) return;
+  const { cx, cz } = S.selChunk;
+  const x1 = cx*CHUNK, z1 = cz*CHUNK, x2 = x1+CHUNK-1, z2 = z1+CHUNK-1;
+  navigator.clipboard.writeText(
+    `Chunk(${cx},${cz}) NW:(${x1},${z1}) NE:(${x2},${z1}) SW:(${x1},${z2}) SE:(${x2},${z2})`
+  ).catch(()=>{});
+}
+
+function centerChunk() {
+  if (!S.selChunk) return;
+  S.cx = S.selChunk.cx * CHUNK + CHUNK / 2;
+  S.cz = S.selChunk.cz * CHUNK + CHUNK / 2;
+  render();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Navigation
+// ════════════════════════════════════════════════════════════════════════════
+document.getElementById('btnGoto').addEventListener('click', () => {
+  const x = parseFloat(document.getElementById('gotoX').value) || 0;
+  const z = parseFloat(document.getElementById('gotoZ').value) || 0;
+  S.cx = x; S.cz = z;
+  S.selChunk = chunkOf(x, z);
+  updateChunkCard();
+  render();
+});
+['gotoX','gotoZ'].forEach(id =>
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('btnGoto').click();
+  })
+);
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Shape type toggle
+// ════════════════════════════════════════════════════════════════════════════
+document.getElementById('shapeType').addEventListener('change', function() {
+  document.getElementById('rectFields').style.display   = this.value === 'rect'   ? '' : 'none';
+  document.getElementById('circleFields').style.display = this.value === 'circle' ? '' : 'none';
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Draw mode
+// ════════════════════════════════════════════════════════════════════════════
+document.getElementById('btnDrawMode').addEventListener('click', () => {
+  S.drawMode ? exitDrawMode() : enterDrawMode();
+});
+
+function enterDrawMode() {
+  S.drawMode = true;
+  document.getElementById('btnDrawMode').classList.add('active');
+  document.getElementById('drawBadge').classList.add('on');
+  canvas.classList.add('drawing');
+}
+
+function exitDrawMode() {
+  S.drawMode = false;
+  S.drawing  = false;
+  S.drawP1   = S.drawP2 = null;
+  document.getElementById('btnDrawMode').classList.remove('active');
+  document.getElementById('drawBadge').classList.remove('on');
+  canvas.classList.remove('drawing');
+  render();
+}
+
+function finishDraw() {
+  const type  = document.getElementById('shapeType').value;
+  const name  = document.getElementById('shapeName').value.trim() || 'Shape';
+  const color = document.getElementById('shapeColor').value;
+  const fill  = document.getElementById('shapeFill').value;
+  let sh;
+
+  if (type === 'rect') {
+    const x1 = Math.round(Math.min(S.drawP1.x, S.drawP2.x));
+    const z1 = Math.round(Math.min(S.drawP1.z, S.drawP2.z));
+    const x2 = Math.round(Math.max(S.drawP1.x, S.drawP2.x));
+    const z2 = Math.round(Math.max(S.drawP1.z, S.drawP2.z));
+    sh = { type:'rect', name, color, fill, x1, z1, x2, z2 };
+    document.getElementById('sx1').value = x1;
+    document.getElementById('sz1').value = z1;
+    document.getElementById('sx2').value = x2;
+    document.getElementById('sz2').value = z2;
+  } else {
+    const dx = S.drawP2.x - S.drawP1.x, dz = S.drawP2.z - S.drawP1.z;
+    const r  = Math.round(Math.hypot(dx, dz));
+    const cx = Math.round(S.drawP1.x), cz = Math.round(S.drawP1.z);
+    sh = { type:'circle', name, color, fill, cx, cz, r };
+    document.getElementById('scx').value = cx;
+    document.getElementById('scz').value = cz;
+    document.getElementById('sr').value  = r;
+  }
+
+  if ((type === 'rect' && (sh.x2 - sh.x1 < 1 || sh.z2 - sh.z1 < 1)) ||
+      (type === 'circle' && sh.r < 1)) return; // too tiny
+
+  S.shapes.push(sh);
+  S.selShape = S.shapes.length - 1;
+  updateShapeList();
+  exitDrawMode();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Add shape from form
+// ════════════════════════════════════════════════════════════════════════════
+document.getElementById('btnAddShape').addEventListener('click', () => {
+  const type  = document.getElementById('shapeType').value;
+  const name  = document.getElementById('shapeName').value.trim() || 'Shape';
+  const color = document.getElementById('shapeColor').value;
+  const fill  = document.getElementById('shapeFill').value;
+  let sh;
+
+  if (type === 'rect') {
+    sh = { type:'rect', name, color, fill,
+      x1: +document.getElementById('sx1').value || 0,
+      z1: +document.getElementById('sz1').value || 0,
+      x2: +document.getElementById('sx2').value || 32,
+      z2: +document.getElementById('sz2').value || 32,
+    };
+  } else {
+    sh = { type:'circle', name, color, fill,
+      cx: +document.getElementById('scx').value || 0,
+      cz: +document.getElementById('scz').value || 0,
+      r:  +document.getElementById('sr').value  || 16,
+    };
+  }
+
+  S.shapes.push(sh);
+  S.selShape = S.shapes.length - 1;
+  updateShapeList();
+  render();
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Shape list UI
+// ════════════════════════════════════════════════════════════════════════════
+function updateShapeList() {
+  const el = document.getElementById('shapeList');
+  if (!S.shapes.length) {
+    el.innerHTML = '<div class="shapes-empty">No shapes yet</div>';
+    return;
+  }
+  el.innerHTML = S.shapes.map((sh, i) => `
+    <div class="shape-item ${i === S.selShape ? 'sel' : ''}" onclick="selectShape(${i})">
+      <div class="swatch ${sh.type === 'rect' ? 'rect' : ''}" style="background:${sh.color}"></div>
+      <span class="shape-name">${escHtml(sh.name)}</span>
+      <span class="shape-type">${sh.type === 'rect' ? '▭' : '◯'}</span>
+      <button class="shape-del" title="Delete" onclick="event.stopPropagation();deleteShape(${i})">✕</button>
+    </div>`
+  ).join('');
+}
+
+function selectShape(i) {
+  S.selShape = i;
+  updateShapeList();
+  const sh = S.shapes[i];
+  if (sh.type === 'rect') { S.cx = (sh.x1+sh.x2)/2; S.cz = (sh.z1+sh.z2)/2; }
+  else                    { S.cx = sh.cx;             S.cz = sh.cz;             }
+  render();
+}
+
+function deleteShape(i) {
+  S.shapes.splice(i, 1);
+  if (S.selShape !== null && S.selShape >= S.shapes.length) S.selShape = null;
+  updateShapeList();
+  render();
+}
+
+function shapeHit(sh, wx, wz) {
+  if (sh.type === 'rect') {
+    const x1 = Math.min(sh.x1,sh.x2), x2 = Math.max(sh.x1,sh.x2);
+    const z1 = Math.min(sh.z1,sh.z2), z2 = Math.max(sh.z1,sh.z2);
+    return wx >= x1 && wx <= x2 && wz >= z1 && wz <= z2;
+  }
+  return Math.hypot(wx - sh.cx, wz - sh.cz) <= sh.r;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Export / Import
+// ════════════════════════════════════════════════════════════════════════════
+document.getElementById('btnExport').addEventListener('click', () => {
+  const data = {
+    version: 1,
+    view:   { cx: S.cx, cz: S.cz, zoom: S.zoom },
+    shapes: S.shapes,
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement('a'), { href: url, download: 'map-data.json' });
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('btnImport').addEventListener('click', () =>
+  document.getElementById('fileInput').click()
+);
+
+document.getElementById('fileInput').addEventListener('change', function() {
+  const file = this.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      loadData(JSON.parse(e.target.result));
+    } catch(err) {
+      alert('Could not parse JSON: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  this.value = '';
+});
+
+function loadData(data) {
+  if (data.view) {
+    S.cx   = data.view.cx   ?? data.view.x ?? 0;
+    S.cz   = data.view.cz   ?? data.view.z ?? 0;
+    S.zoom = data.view.zoom  ?? 5;
+  }
+  if (Array.isArray(data.shapes)) S.shapes = data.shapes;
+  S.selShape = null;
+  S.selChunk = null;
+  updateChunkCard();
+  updateShapeList();
+  render();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Presets  (static JSON files in ./presets/  — works on GitHub Pages)
+// ════════════════════════════════════════════════════════════════════════════
+const presetModal = document.getElementById('presetModal');
+document.getElementById('btnPresets').addEventListener('click', openPresets);
+document.getElementById('btnModalClose').addEventListener('click', () => presetModal.classList.remove('open'));
+presetModal.addEventListener('click', e => { if (e.target === presetModal) presetModal.classList.remove('open'); });
+
+async function openPresets() {
+  const listEl = document.getElementById('presetList');
+  listEl.innerHTML = '<div class="modal-empty">Loading…</div>';
+  presetModal.classList.add('open');
+
+  try {
+    const resp  = await fetch('./presets/index.json');
+    if (!resp.ok) throw new Error('No presets/index.json found (status ' + resp.status + ')');
+    const index = await resp.json();
+
+    if (!index.length) {
+      listEl.innerHTML = '<div class="modal-empty">No presets defined in presets/index.json</div>';
+      return;
+    }
+
+    listEl.innerHTML = index.map((p, i) => `
+      <div class="preset-item" onclick="loadPreset(${i})">${escHtml(p.name)}</div>`
+    ).join('');
+
+    // store index for loadPreset
+    window._presetIndex = index;
+  } catch(err) {
+    listEl.innerHTML = `<div class="modal-empty" style="color:#f85149">
+      ${escHtml(err.message)}<br><br>
+      <span style="color:#484f58">Create <code>presets/index.json</code> listing your preset files.</span>
+    </div>`;
+  }
+}
+
+async function loadPreset(i) {
+  const p = window._presetIndex[i];
+  try {
+    const resp = await fetch(`./presets/${p.file}`);
+    if (!resp.ok) throw new Error(`Could not fetch presets/${p.file}`);
+    loadData(await resp.json());
+    presetModal.classList.remove('open');
+  } catch(err) {
+    alert('Failed to load preset: ' + err.message);
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Init
+// ════════════════════════════════════════════════════════════════════════════
+document.getElementById('stZoom').innerHTML = `<b>Zoom:</b> ${S.zoom.toFixed(2)}px/u`;
+render();
+</script>
+</body>
+</html>

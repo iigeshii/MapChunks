@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "view": { "cx": 0, "cz": 0, "zoom": 5 },
+  "shapes": [
+    {
+      "type": "rect",
+      "name": "Main Base",
+      "color": "#3fb950",
+      "fill": "0.3",
+      "x1": -32, "z1": -32,
+      "x2":  32, "z2":  32
+    },
+    {
+      "type": "circle",
+      "name": "AFK Spot",
+      "color": "#f0883e",
+      "fill": "0.15",
+      "cx": 0, "cz": 0,
+      "r": 128
+    }
+  ]
+}
