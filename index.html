@@ -9,8 +9,12 @@
 body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f8;color:#1f2328;height:100vh;display:flex;flex-direction:column;overflow:hidden;user-select:none}
 
 /* ── Header ── */
-header{display:flex;align-items:center;padding:6px 12px;background:#ffffff;border-bottom:1px solid #d0d7de;gap:8px;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+header{display:flex;align-items:center;padding:6px 12px;background:#ffffff;border-bottom:1px solid #d0d7de;gap:12px;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,.06)}
 header h1{font-size:1rem;color:#0969da;flex:1;white-space:nowrap;font-weight:700}
+.hdr-file-ops{display:flex;gap:4px;align-items:center;flex-shrink:0}
+.hdr-title{flex:1;display:flex;flex-direction:column;align-items:center;min-width:0}
+.app-name{font-size:0.85rem;font-weight:700;color:#0969da;line-height:1.2}
+.hdr-filename{font-size:0.72rem;color:#57606a;font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
 .btn{padding:5px 12px;border:1px solid #d0d7de;background:#fff;color:#57606a;border-radius:6px;cursor:pointer;font-size:0.8rem;transition:all .15s;white-space:nowrap}
 .btn:hover{border-color:#0969da;color:#0969da;background:#f6f8fa}
 .btn.primary{border-color:#2da44e;background:#2da44e;color:#fff}
@@ -82,6 +86,15 @@ canvas.drawing{cursor:crosshair}
 .modal-footer{display:flex;justify-content:flex-end;gap:8px}
 .modal-empty{color:#8c959f;font-size:0.82rem;text-align:center;padding:16px}
 
+/* ── Color swatches ── */
+.color-swatches{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:4px}
+.cswatch{width:22px;height:22px;border-radius:4px;cursor:pointer;border:2px solid transparent;flex-shrink:0;transition:transform .1s,border-color .1s;position:relative}
+.cswatch:hover{transform:scale(1.2);z-index:1}
+.cswatch.on{border-color:#1f2328;box-shadow:0 0 0 1px rgba(255,255,255,.85) inset}
+.cswatch.rainbow{background:conic-gradient(red,#ff0,lime,cyan,blue,magenta,red)}
+.cswatch.custom-preview{border-style:dashed;border-color:#d0d7de}
+.cswatch.custom-preview.on{border-style:solid;border-color:#1f2328}
+
 /* ── Footer / status ── */
 footer{background:#ffffff;border-top:1px solid #d0d7de;padding:3px 12px;font-size:0.72rem;color:#8c959f;display:flex;gap:20px;flex-shrink:0}
 footer span{font-family:monospace}
@@ -91,11 +104,19 @@ footer span b{color:#57606a}
 <body>
 
 <header>
-  <h1>Map Chunk Tool</h1>
-  <button class="btn" id="btnPresets">Presets</button>
+  <div class="hdr-file-ops">
+    <button class="btn" id="btnOpen">Open</button>
+    <button class="btn primary" id="btnSave">Save</button>
+    <button class="btn" id="btnSaveAs">Save As…</button>
+  </div>
+  <div class="hdr-title">
+    <span class="app-name">Map Chunk Tool</span>
+    <span class="hdr-filename" id="hdrFilename">No file open</span>
+  </div>
+  <div class="hdr-file-ops" style="margin-left:auto">
+    <button class="btn" id="btnPresets">Presets ▾</button>
+  </div>
   <input type="file" id="fileInput" accept=".json" style="display:none">
-  <button class="btn" id="btnImport">Import JSON</button>
-  <button class="btn primary" id="btnExport">Export JSON</button>
 </header>
 
 <div class="main">
@@ -132,7 +153,11 @@ footer span b{color:#57606a}
           </select>
         </div>
         <div class="field"><label>Name</label><input type="text" id="shapeName" placeholder="My Base"></div>
-        <div class="field"><label>Color</label><input type="color" id="shapeColor" value="#388bfd"></div>
+        <div class="field">
+          <label>Color</label>
+          <div class="color-swatches" id="colorSwatches"></div>
+          <input type="color" id="shapeColor" value="#388bfd" style="display:none">
+        </div>
         <div class="field"><label>Fill opacity</label>
           <select id="shapeFill">
             <option value="0.15">Light</option>
@@ -189,10 +214,10 @@ footer span b{color:#57606a}
 <!-- ── Preset modal ── -->
 <div class="modal-bg" id="presetModal">
   <div class="modal">
-    <h2>Load Preset</h2>
+    <h2>Presets</h2>
     <div class="modal-list" id="presetList"></div>
     <div class="modal-footer">
-      <button class="btn" id="btnModalClose">Cancel</button>
+      <button class="btn" id="btnModalClose">Close</button>
     </div>
   </div>
 </div>
@@ -202,7 +227,7 @@ footer span b{color:#57606a}
   <span id="stChunk"><b>Chunk:</b> —</span>
   <span id="stRegion"><b>Region:</b> —</span>
   <span id="stZoom"><b>Zoom:</b> —</span>
-  <span style="margin-left:auto;color:#21262d">Right-drag or middle-drag to pan · Scroll to zoom · Click chunk to select</span>
+  <span id="stMode" style="margin-left:auto"></span>
 </footer>
 
 <script>
@@ -236,6 +261,9 @@ const S = {
 
   // form state
   editMode: false,
+  openFileHandle: null,
+  activePresetName: null,
+  dirty: false,
 
   // data
   shapes: [],
@@ -744,6 +772,7 @@ function finishDraw() {
 
   S.shapes.push(sh);
   S.selShape = S.shapes.length - 1;
+  markDirty();
   updateShapeList();
   exitDrawMode();
 }
@@ -774,14 +803,13 @@ document.getElementById('btnAddShape').addEventListener('click', () => {
   }
 
   if (S.editMode && S.selShape !== null) {
-    // Update existing shape in-place
     S.shapes[S.selShape] = sh;
   } else {
-    // Add new shape
     S.shapes.push(sh);
     S.selShape = S.shapes.length - 1;
   }
 
+  markDirty();
   updateShapeList();
   render();
 });
@@ -794,9 +822,9 @@ function resetShapeForm() {
   document.getElementById('btnAddShape').textContent = 'Add';
   document.getElementById('btnNewShape').style.display = 'none';
   document.getElementById('shapeFormHint').style.display = '';
-  document.getElementById('shapeName').value  = '';
-  document.getElementById('shapeColor').value = '#388bfd';
+  document.getElementById('shapeName').value = '';
   document.getElementById('shapeFill').value  = '0.3';
+  setColor('#388bfd');
   document.getElementById('shapeType').value  = 'rect';
   document.getElementById('sx1').value = 0; document.getElementById('sz1').value = 0;
   document.getElementById('sx2').value = 32; document.getElementById('sz2').value = 32;
@@ -811,10 +839,10 @@ function loadShapeIntoForm(sh) {
   document.getElementById('btnNewShape').style.display = '';
   document.getElementById('shapeFormHint').style.display = 'none';
 
-  document.getElementById('shapeType').value  = sh.type;
+  document.getElementById('shapeType').value = sh.type;
   document.getElementById('shapeName').value  = sh.name;
-  document.getElementById('shapeColor').value = sh.color;
   document.getElementById('shapeFill').value  = sh.fill ?? '0.3';
+  setColor(sh.color);
 
   document.getElementById('rectFields').style.display   = sh.type === 'rect'   ? '' : 'none';
   document.getElementById('circleFields').style.display = sh.type === 'circle' ? '' : 'none';
@@ -864,6 +892,7 @@ function deleteShape(i) {
   S.shapes.splice(i, 1);
   if (S.selShape !== null && S.selShape >= S.shapes.length) S.selShape = null;
   if (S.editMode) resetShapeForm();
+  markDirty();
   updateShapeList();
   render();
 }
@@ -884,23 +913,66 @@ function escHtml(s) {
 // ════════════════════════════════════════════════════════════════════════════
 //  Export / Import
 // ════════════════════════════════════════════════════════════════════════════
-document.getElementById('btnExport').addEventListener('click', () => {
-  const data = {
-    version: 1,
-    view:   { cx: S.cx, cz: S.cz, zoom: S.zoom },
-    shapes: S.shapes,
-  };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url  = URL.createObjectURL(blob);
-  const a    = Object.assign(document.createElement('a'), { href: url, download: 'map-data.json' });
-  a.click();
-  URL.revokeObjectURL(url);
+// ════════════════════════════════════════════════════════════════════════════
+//  File management — Open / Save / Save As
+// ════════════════════════════════════════════════════════════════════════════
+function currentJson() {
+  return JSON.stringify({ version:1, view:{ cx:S.cx, cz:S.cz, zoom:S.zoom }, shapes:S.shapes }, null, 2);
+}
+
+function markDirty() {
+  S.dirty = true;
+  updateFileState();
+}
+
+function markClean() {
+  S.dirty = false;
+  updateFileState();
+}
+
+function updateFileState() {
+  const el   = document.getElementById('hdrFilename');
+  const dot  = S.dirty ? ' ●' : '';
+  if (S.openFileHandle) {
+    el.textContent = S.openFileHandle.name + dot;
+    el.title       = S.dirty ? 'Unsaved changes' : S.openFileHandle.name;
+  } else if (S.activePresetName) {
+    el.textContent = `${S.activePresetName} (unsaved)${dot}`;
+    el.title       = 'Use Save As to write to a file';
+  } else {
+    el.textContent = 'No file open';
+    el.title       = '';
+  }
+}
+
+window.addEventListener('beforeunload', e => {
+  if (S.dirty) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
 });
 
-document.getElementById('btnImport').addEventListener('click', () =>
-  document.getElementById('fileInput').click()
-);
+// ── Open ──────────────────────────────────────────────────────────────────
+document.getElementById('btnOpen').addEventListener('click', async () => {
+  if (CAN_PICK) {
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        types: [{ description: 'JSON file', accept: { 'application/json': ['.json'] } }],
+      });
+      const text = await (await handle.getFile()).text();
+      loadData(JSON.parse(text));
+      S.openFileHandle   = handle;
+      S.activePresetName = null;
+      updateFileState();
+    } catch(e) {
+      if (e.name !== 'AbortError') alert('Could not open file: ' + e.message);
+    }
+  } else {
+    document.getElementById('fileInput').click();
+  }
+});
 
+// Fallback file input for Firefox / Safari (read-only, no save-back)
 document.getElementById('fileInput').addEventListener('change', function() {
   const file = this.files[0];
   if (!file) return;
@@ -908,12 +980,62 @@ document.getElementById('fileInput').addEventListener('change', function() {
   reader.onload = e => {
     try {
       loadData(JSON.parse(e.target.result));
-    } catch(err) {
-      alert('Could not parse JSON: ' + err.message);
-    }
+      S.openFileHandle   = null;
+      S.activePresetName = file.name.replace(/\.json$/i, '');
+      updateFileState();
+    } catch(err) { alert('Could not parse JSON: ' + err.message); }
   };
   reader.readAsText(file);
   this.value = '';
+});
+
+// ── Save ──────────────────────────────────────────────────────────────────
+document.getElementById('btnSave').addEventListener('click', async () => {
+  if (S.openFileHandle) {
+    // Write straight back to the open file
+    try {
+      const perm = await S.openFileHandle.queryPermission({ mode: 'readwrite' });
+      if (perm !== 'granted') {
+        const req = await S.openFileHandle.requestPermission({ mode: 'readwrite' });
+        if (req !== 'granted') { alert('Write permission denied.'); return; }
+      }
+      const w = await S.openFileHandle.createWritable();
+      await w.write(currentJson());
+      await w.close();
+      markClean();
+    } catch(e) { if (e.name !== 'AbortError') alert('Save failed: ' + e.message); }
+  } else {
+    // No file open yet — behave like Save As
+    document.getElementById('btnSaveAs').click();
+  }
+});
+
+// ── Save As ───────────────────────────────────────────────────────────────
+document.getElementById('btnSaveAs').addEventListener('click', async () => {
+  const suggested = S.openFileHandle
+    ? S.openFileHandle.name
+    : S.activePresetName ? `${S.activePresetName}.json` : 'map-data.json';
+
+  if (CAN_PICK) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: suggested,
+        types: [{ description: 'JSON file', accept: { 'application/json': ['.json'] } }],
+      });
+      const w = await handle.createWritable();
+      await w.write(currentJson());
+      await w.close();
+      S.openFileHandle   = handle;
+      S.activePresetName = null;
+      markClean();
+    } catch(e) { if (e.name !== 'AbortError') alert('Save failed: ' + e.message); }
+  } else {
+    // Firefox / Safari fallback — plain download
+    const url = URL.createObjectURL(new Blob([currentJson()], { type:'application/json' }));
+    const a   = Object.assign(document.createElement('a'), { href:url, download:suggested });
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 });
 
 function loadData(data) {
@@ -925,57 +1047,152 @@ function loadData(data) {
   if (Array.isArray(data.shapes)) S.shapes = data.shapes;
   S.selShape = null;
   S.selChunk = null;
+  S.dirty    = false;
   updateChunkCard();
   updateShapeList();
   render();
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//  Presets  (static JSON files in ./presets/  — works on GitHub Pages)
+//  Environment detection
 // ════════════════════════════════════════════════════════════════════════════
+const IS_LOCAL = window.location.protocol === 'file:';
+const CAN_PICK = typeof window.showOpenFilePicker === 'function';
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Presets
+// ════════════════════════════════════════════════════════════════════════════
+// ── Inline preset data (add entries here to show them in the Presets menu) ──
+const PRESETS = [
+  {
+    name: 'AshenMark',
+    data: {"version":1,"view":{"cx":-1473.913018788302,"cz":309.6278447518899,"zoom":11.565303828125003},"shapes":[{"type":"rect","name":"Starter base","color":"#388bfd","fill":"0.3","x1":-1510,"z1":303,"x2":-1507,"z2":313},{"type":"rect","name":"Villager House","color":"#495057","fill":"0.3","x1":-1509,"z1":296,"x2":-1503,"z2":287},{"type":"rect","name":"Farm","color":"#2f9e44","fill":"0.15","x1":-1516,"z1":305,"x2":-1504,"z2":334},{"type":"rect","name":"Villager House","color":"#495057","fill":"0.3","x1":-1509,"z1":280,"x2":-1505,"z2":276},{"type":"rect","name":"Villager House","color":"#495057","fill":"0.3","x1":-1474,"z1":274,"x2":-1470,"z2":269},{"type":"rect","name":"Well","color":"#f59f00","fill":"0.3","x1":-1466,"z1":282,"x2":-1469,"z2":285},{"type":"rect","name":"Villager House","color":"#495057","fill":"0.3","x1":-1451,"z1":287,"x2":-1446,"z2":291},{"type":"rect","name":"Villager House","color":"#495057","fill":"0.3","x1":-1440,"z1":281,"x2":-1436,"z2":277},{"type":"rect","name":"Villager House","color":"#495057","fill":"0.3","x1":-1427,"z1":281,"x2":-1432,"z2":277},{"type":"rect","name":"Villager House","color":"#495057","fill":"0.3","x1":-1469,"z1":305,"x2":-1472,"z2":301},{"type":"rect","name":"Villager House","color":"#495057","fill":"0.3","x1":-1476,"z1":329,"x2":-1482,"z2":335},{"type":"rect","name":"Villager House","color":"#495057","fill":"0.3","x1":-1471,"z1":333,"x2":-1466,"z2":329},{"type":"rect","name":"Villager House","color":"#495057","fill":"0.3","x1":-1459,"z1":333,"x2":-1463,"z2":329},{"type":"rect","name":"Villager House","color":"#495057","fill":"0.3","x1":-1483,"z1":290,"x2":-1487,"z2":286},{"type":"rect","name":"Villager House","color":"#495057","fill":"0.3","x1":-1491,"z1":287,"x2":-1495,"z2":290}]}
+  },
+  {
+    name: 'My Base (example)',
+    data: {"version":1,"view":{"cx":0,"cz":0,"zoom":5},"shapes":[{"type":"rect","name":"Main Base","color":"#3fb950","fill":"0.3","x1":-32,"z1":-32,"x2":32,"z2":32},{"type":"circle","name":"AFK Spot","color":"#f0883e","fill":"0.15","cx":0,"cz":0,"r":128}]}
+  },
+];
+
 const presetModal = document.getElementById('presetModal');
 document.getElementById('btnPresets').addEventListener('click', openPresets);
 document.getElementById('btnModalClose').addEventListener('click', () => presetModal.classList.remove('open'));
 presetModal.addEventListener('click', e => { if (e.target === presetModal) presetModal.classList.remove('open'); });
 
-async function openPresets() {
+
+// ── Presets modal ──────────────────────────────────────────────────────────
+function openPresets() {
   const listEl = document.getElementById('presetList');
-  listEl.innerHTML = '<div class="modal-empty">Loading…</div>';
+  listEl.innerHTML = (PRESETS.length
+    ? PRESETS.map((p, i) => `<div class="preset-item" onclick="applyPreset(${i})">${escHtml(p.name)}</div>`).join('')
+    : '<div class="modal-empty">No presets defined yet.</div>');
   presetModal.classList.add('open');
-
-  try {
-    const resp  = await fetch('./presets/index.json');
-    if (!resp.ok) throw new Error('No presets/index.json found (status ' + resp.status + ')');
-    const index = await resp.json();
-
-    if (!index.length) {
-      listEl.innerHTML = '<div class="modal-empty">No presets defined in presets/index.json</div>';
-      return;
-    }
-
-    listEl.innerHTML = index.map((p, i) => `
-      <div class="preset-item" onclick="loadPreset(${i})">${escHtml(p.name)}</div>`
-    ).join('');
-
-    // store index for loadPreset
-    window._presetIndex = index;
-  } catch(err) {
-    listEl.innerHTML = `<div class="modal-empty" style="color:#f85149">
-      ${escHtml(err.message)}<br><br>
-      <span style="color:#484f58">Create <code>presets/index.json</code> listing your preset files.</span>
-    </div>`;
-  }
 }
 
-async function loadPreset(i) {
-  const p = window._presetIndex[i];
-  try {
-    const resp = await fetch(`./presets/${p.file}`);
-    if (!resp.ok) throw new Error(`Could not fetch presets/${p.file}`);
-    loadData(await resp.json());
-    presetModal.classList.remove('open');
-  } catch(err) {
-    alert('Failed to load preset: ' + err.message);
+async function applyPreset(i) {
+  const preset = PRESETS[i];
+  presetModal.classList.remove('open');
+
+  if (IS_LOCAL && CAN_PICK) {
+    // Local: open the actual file so Save works directly (picker remembers last folder)
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        types: [{ description: 'JSON file', accept: { 'application/json': ['.json'] } }],
+      });
+      const text = await (await handle.getFile()).text();
+      loadData(JSON.parse(text));
+      S.openFileHandle   = handle;
+      S.activePresetName = null;
+    } catch(e) {
+      if (e.name === 'AbortError') return; // cancelled — do nothing
+      // Picker failed — fall back to inline data
+      loadData(preset.data);
+      S.openFileHandle   = null;
+      S.activePresetName = preset.name;
+    }
+  } else {
+    // Remote: load from inline data
+    loadData(preset.data);
+    S.openFileHandle   = null;
+    S.activePresetName = preset.name;
+  }
+
+  updateFileState();
+}
+
+function applyPreset(i) {
+  loadData(PRESETS[i].data);
+  presetModal.classList.remove('open');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Color swatches
+// ════════════════════════════════════════════════════════════════════════════
+const PRESET_COLORS = [
+  '#e03131', '#f76707', '#f59f00', '#66a80f',
+  '#2f9e44', '#099268', '#0c8599', '#1971c2',
+  '#3b5bdb', '#7048e8', '#c2255c', '#495057',
+];
+
+function initColorSwatches() {
+  const wrap  = document.getElementById('colorSwatches');
+  const input = document.getElementById('shapeColor');
+
+  PRESET_COLORS.forEach(hex => {
+    const el = document.createElement('div');
+    el.className = 'cswatch';
+    el.style.background = hex;
+    el.dataset.color = hex;
+    el.title = hex;
+    el.addEventListener('click', () => setColor(hex));
+    wrap.appendChild(el);
+  });
+
+  // Custom-preview tile (shown when a non-preset color is active)
+  const preview = document.createElement('div');
+  preview.className = 'cswatch custom-preview';
+  preview.id = 'customPreviewSwatch';
+  preview.title = 'Current custom color';
+  preview.style.display = 'none';
+  preview.addEventListener('click', () => input.click());
+  wrap.appendChild(preview);
+
+  // Rainbow "open picker" tile
+  const rainbow = document.createElement('div');
+  rainbow.className = 'cswatch rainbow';
+  rainbow.title = 'Custom color…';
+  rainbow.addEventListener('click', () => input.click());
+  wrap.appendChild(rainbow);
+
+  input.addEventListener('input', () => setColor(input.value));
+
+  setColor(input.value);
+}
+
+function setColor(hex) {
+  document.getElementById('shapeColor').value = hex;
+  const lc = hex.toLowerCase();
+
+  // Update swatch highlights
+  document.querySelectorAll('.cswatch[data-color]').forEach(s =>
+    s.classList.toggle('on', s.dataset.color === lc)
+  );
+
+  const isPreset = PRESET_COLORS.map(c => c.toLowerCase()).includes(lc);
+  const preview  = document.getElementById('customPreviewSwatch');
+
+  if (isPreset) {
+    preview.style.display = 'none';
+    preview.classList.remove('on');
+  } else {
+    preview.style.display = '';
+    preview.style.background = hex;
+    preview.dataset.color = lc;
+    preview.title = hex;
+    // Re-run toggle so the new data-color is picked up
+    document.querySelectorAll('.cswatch[data-color]').forEach(s =>
+      s.classList.toggle('on', s.dataset.color === lc)
+    );
   }
 }
 
@@ -983,6 +1200,11 @@ async function loadPreset(i) {
 //  Init
 // ════════════════════════════════════════════════════════════════════════════
 document.getElementById('stZoom').innerHTML = `<b>Zoom:</b> ${S.zoom.toFixed(2)}px/u`;
+document.getElementById('stMode').innerHTML = IS_LOCAL
+  ? '<b style="color:#2da44e">Local</b>'
+  : '<b style="color:#0969da">Remote</b>';
+updateFileState();
+initColorSwatches();
 render();
 </script>
 </body>
