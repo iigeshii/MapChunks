@@ -489,7 +489,9 @@ function drawShape(sh, selected) {
   const lw      = selected ? 2.5 : 1.5;
 
   if (sh.type === 'rect') {
-    const s1 = w2s(sh.x1, sh.z1), s2 = w2s(sh.x2, sh.z2);
+    const minX = Math.min(sh.x1, sh.x2), maxX = Math.max(sh.x1, sh.x2);
+    const minZ = Math.min(sh.z1, sh.z2), maxZ = Math.max(sh.z1, sh.z2);
+    const s1 = w2s(minX, minZ), s2 = w2s(maxX + 1, maxZ + 1); // +1: extend to far edge of last block
     const sw = s2.x - s1.x, sh2 = s2.y - s1.y;
     ctx.fillStyle   = hex2rgba(sh.color, alpha);
     ctx.fillRect(s1.x, s1.y, sw, sh2);
@@ -524,7 +526,12 @@ function drawPreview() {
   ctx.fillStyle   = hex2rgba(color, 0.15);
 
   if (type === 'rect') {
-    const s1 = w2s(S.drawP1.x, S.drawP1.z), s2 = w2s(S.drawP2.x, S.drawP2.z);
+    // Snap preview to block grid to match what finishDraw will produce
+    const rx1 = Math.round(Math.min(S.drawP1.x, S.drawP2.x));
+    const rz1 = Math.round(Math.min(S.drawP1.z, S.drawP2.z));
+    const rx2 = Math.round(Math.max(S.drawP1.x, S.drawP2.x));
+    const rz2 = Math.round(Math.max(S.drawP1.z, S.drawP2.z));
+    const s1 = w2s(rx1, rz1), s2 = w2s(rx2 + 1, rz2 + 1);
     ctx.fillRect(s1.x, s1.y, s2.x - s1.x, s2.y - s1.y);
     ctx.strokeRect(s1.x, s1.y, s2.x - s1.x, s2.y - s1.y);
   } else {
@@ -742,9 +749,9 @@ document.getElementById('shapeType').addEventListener('change', function() {
 
 // ── Dimension readouts ────────────────────────────────────────────────────
 function updateRectDims() {
-  const w = Math.abs((+document.getElementById('sx2').value || 0) - (+document.getElementById('sx1').value || 0));
-  const h = Math.abs((+document.getElementById('sz2').value || 0) - (+document.getElementById('sz1').value || 0));
-  document.getElementById('rectDims').textContent = (w || h) ? `${w} × ${h} blocks` : '';
+  const w = Math.abs((+document.getElementById('sx2').value || 0) - (+document.getElementById('sx1').value || 0)) + 1;
+  const h = Math.abs((+document.getElementById('sz2').value || 0) - (+document.getElementById('sz1').value || 0)) + 1;
+  document.getElementById('rectDims').textContent = `${w} × ${h} blocks`;
 }
 function updateCircleDims() {
   const r = +document.getElementById('sr').value || 0;
@@ -940,9 +947,9 @@ function deleteShape(i) {
 
 function shapeHit(sh, wx, wz) {
   if (sh.type === 'rect') {
-    const x1 = Math.min(sh.x1,sh.x2), x2 = Math.max(sh.x1,sh.x2);
-    const z1 = Math.min(sh.z1,sh.z2), z2 = Math.max(sh.z1,sh.z2);
-    return wx >= x1 && wx <= x2 && wz >= z1 && wz <= z2;
+    const x1 = Math.min(sh.x1,sh.x2), x2 = Math.max(sh.x1,sh.x2) + 1;
+    const z1 = Math.min(sh.z1,sh.z2), z2 = Math.max(sh.z1,sh.z2) + 1;
+    return wx >= x1 && wx < x2 && wz >= z1 && wz < z2;
   }
   return Math.hypot(wx - sh.cx, wz - sh.cz) <= sh.r;
 }
