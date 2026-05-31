@@ -177,6 +177,7 @@ footer span b{color:#57606a}
             <div class="field"><label>X2</label><input type="number" id="sx2" value="32"></div>
             <div class="field"><label>Z2</label><input type="number" id="sz2" value="32"></div>
           </div>
+          <div id="rectDims" style="font-size:0.72rem;color:#0969da;text-align:center;font-family:monospace;margin-top:2px"></div>
         </div>
         <!-- Circle coords -->
         <div id="circleFields" style="display:none">
@@ -185,6 +186,7 @@ footer span b{color:#57606a}
             <div class="field"><label>CZ</label><input type="number" id="scz" value="0"></div>
           </div>
           <div class="field"><label>Radius</label><input type="number" id="sr" value="16"></div>
+          <div id="circleDims" style="font-size:0.72rem;color:#0969da;text-align:center;font-family:monospace;margin-top:2px"></div>
         </div>
 
         <div style="display:flex;gap:6px;margin-top:6px">
@@ -343,6 +345,28 @@ function drawGrid(tl, br, W, H) {
   const cxB = Math.ceil (br.x / CHUNK) + 1;
   const czA = Math.floor(tl.z / CHUNK) - 1;
   const czB = Math.ceil (br.z / CHUNK) + 1;
+
+  // Block lines (very light, only when each block is large enough to see)
+  if (S.zoom >= 6) {
+    const bxA = Math.floor(tl.x) - 1;
+    const bxB = Math.ceil (br.x) + 1;
+    const bzA = Math.floor(tl.z) - 1;
+    const bzB = Math.ceil (br.z) + 1;
+    ctx.strokeStyle = '#b8cfe0';
+    ctx.lineWidth   = 0.5;
+    ctx.beginPath();
+    for (let bx = bxA; bx <= bxB; bx++) {
+      if (bx % CHUNK === 0) continue; // chunk line will cover this
+      const sx = w2s(bx, 0).x;
+      ctx.moveTo(sx, 0); ctx.lineTo(sx, H);
+    }
+    for (let bz = bzA; bz <= bzB; bz++) {
+      if (bz % CHUNK === 0) continue;
+      const sy = w2s(0, bz).y;
+      ctx.moveTo(0, sy); ctx.lineTo(W, sy);
+    }
+    ctx.stroke();
+  }
 
   // Chunk lines (only when visible enough)
   if (cpx >= 3) {
@@ -716,6 +740,19 @@ document.getElementById('shapeType').addEventListener('change', function() {
   document.getElementById('circleFields').style.display = this.value === 'circle' ? '' : 'none';
 });
 
+// ── Dimension readouts ────────────────────────────────────────────────────
+function updateRectDims() {
+  const w = Math.abs((+document.getElementById('sx2').value || 0) - (+document.getElementById('sx1').value || 0));
+  const h = Math.abs((+document.getElementById('sz2').value || 0) - (+document.getElementById('sz1').value || 0));
+  document.getElementById('rectDims').textContent = (w || h) ? `${w} × ${h} blocks` : '';
+}
+function updateCircleDims() {
+  const r = +document.getElementById('sr').value || 0;
+  document.getElementById('circleDims').textContent = r ? `diameter: ${r * 2} blocks` : '';
+}
+['sx1','sz1','sx2','sz2'].forEach(id => document.getElementById(id).addEventListener('input', updateRectDims));
+document.getElementById('sr').addEventListener('input', updateCircleDims);
+
 // ════════════════════════════════════════════════════════════════════════════
 //  Draw mode
 // ════════════════════════════════════════════════════════════════════════════
@@ -830,6 +867,8 @@ function resetShapeForm() {
   document.getElementById('sx2').value = 32; document.getElementById('sz2').value = 32;
   document.getElementById('rectFields').style.display   = '';
   document.getElementById('circleFields').style.display = 'none';
+  updateRectDims();
+  document.getElementById('circleDims').textContent = '';
 }
 
 function loadShapeIntoForm(sh) {
@@ -852,10 +891,12 @@ function loadShapeIntoForm(sh) {
     document.getElementById('sz1').value = sh.z1;
     document.getElementById('sx2').value = sh.x2;
     document.getElementById('sz2').value = sh.z2;
+    updateRectDims();
   } else {
     document.getElementById('scx').value = sh.cx;
     document.getElementById('scz').value = sh.cz;
     document.getElementById('sr').value  = sh.r;
+    updateCircleDims();
   }
 }
 
@@ -1181,6 +1222,7 @@ function setColor(hex) {
 //  Init
 // ════════════════════════════════════════════════════════════════════════════
 document.getElementById('stZoom').innerHTML = `<b>Zoom:</b> ${S.zoom.toFixed(2)}px/u`;
+updateRectDims();
 document.getElementById('stMode').innerHTML = IS_LOCAL
   ? '<b style="color:#2da44e">Local</b>'
   : '<b style="color:#0969da">Remote</b>';
