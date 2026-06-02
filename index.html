@@ -1523,8 +1523,19 @@ function selectShape(i) {
   S.selShape = i;
   updateShapeList();
   const sh = S.shapes[i];
-  if (sh.type === 'rect') { S.cx = (sh.x1+sh.x2)/2; S.cz = (sh.z1+sh.z2)/2; }
-  else                    { S.cx = sh.cx;             S.cz = sh.cz;             }
+  if (sh.type === 'rect') {
+    S.cx = (sh.x1 + sh.x2) / 2;
+    S.cz = (sh.z1 + sh.z2) / 2;
+  } else if (sh.type === 'line') {
+    S.cx = (sh.x1 + sh.x2) / 2 + 0.5;
+    S.cz = (sh.z1 + sh.z2) / 2 + 0.5;
+  } else if (sh.type === 'poly' && sh.points?.length) {
+    S.cx = sh.points.reduce((s, p) => s + p.x, 0) / sh.points.length;
+    S.cz = sh.points.reduce((s, p) => s + p.z, 0) / sh.points.length;
+  } else if (sh.cx !== undefined) {
+    S.cx = sh.cx;
+    S.cz = sh.cz;
+  }
   loadShapeIntoForm(sh);
   render();
 }
