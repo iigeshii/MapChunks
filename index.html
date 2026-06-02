@@ -70,8 +70,6 @@ header h1{font-size:1rem;color:#0969da;flex:1;white-space:nowrap;font-weight:700
 canvas{display:block;width:100%;height:100%;cursor:crosshair}
 canvas.panning{cursor:grabbing}
 canvas.drawing{cursor:crosshair}
-canvas.shape-hover{cursor:grab}
-canvas.shape-drag{cursor:grabbing}
 
 /* ── Draw mode badge ── */
 .draw-badge{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:#e16f24;color:#fff;padding:4px 14px;border-radius:20px;font-size:0.78rem;font-weight:700;letter-spacing:.04em;display:none;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.2)}
@@ -325,12 +323,14 @@ const S = {
   activePresetName: null,
   dirty: false,
 
-  // shape drag
+  // shape drag / resize
   drawPolyPoints: [],
   draggingShape: false,
+  resizingShape: false,
   dragShapeIdx: null,
   dragStart: null,
   dragOrigin: null,
+  resizeHandle: null,
 
   // data
   shapes: [],
@@ -403,6 +403,11 @@ function render() {
 
   // Origin marker
   drawOrigin();
+
+  // Resize handles on selected shape
+  if (S.selShape !== null && S.shapes[S.selShape] && !S.drawing) {
+    drawHandles(S.shapes[S.selShape]);
+  }
 }
 
 // ── Map image ─────────────────────────────────────────────────────────────
@@ -705,6 +710,99 @@ function hex2rgba(hex, a) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+//  Resize handles
+// ════════════════════════════════════════════════════════════════════════════
+const HANDLE_HIT_PX = 8;
+
+function getHandles(sh) {
+  if (sh.type === 'rect') {
+    const x1 = Math.min(sh.x1,sh.x2), x2 = Math.max(sh.x1,sh.x2);
+    const z1 = Math.min(sh.z1,sh.z2), z2 = Math.max(sh.z1,sh.z2);
+    const mx = (x1+x2+1)/2, mz = (z1+z2+1)/2;
+    return [
+      {id:'nw', wx:x1,   wz:z1,   cur:'nw-resize'},
+      {id:'ne', wx:x2+1, wz:z1,   cur:'ne-resize'},
+      {id:'se', wx:x2+1, wz:z2+1, cur:'se-resize'},
+      {id:'sw', wx:x1,   wz:z2+1, cur:'sw-resize'},
+      {id:'n',  wx:mx,   wz:z1,   cur:'n-resize' },
+      {id:'s',  wx:mx,   wz:z2+1, cur:'s-resize' },
+      {id:'e',  wx:x2+1, wz:mz,   cur:'e-resize' },
+      {id:'w',  wx:x1,   wz:mz,   cur:'w-resize' },
+    ];
+  }
+  if (sh.type === 'circle') return [
+    {id:'r', wx:sh.cx+sh.r, wz:sh.cz,      cur:'ew-resize'},
+    {id:'r', wx:sh.cx-sh.r, wz:sh.cz,      cur:'ew-resize'},
+    {id:'r', wx:sh.cx,      wz:sh.cz+sh.r, cur:'ns-resize'},
+    {id:'r', wx:sh.cx,      wz:sh.cz-sh.r, cur:'ns-resize'},
+  ];
+  if (sh.type === 'ellipse') return [
+    {id:'rx', wx:sh.cx+sh.rx, wz:sh.cz,       cur:'e-resize'},
+    {id:'rx', wx:sh.cx-sh.rx, wz:sh.cz,       cur:'w-resize'},
+    {id:'rz', wx:sh.cx,       wz:sh.cz+sh.rz, cur:'s-resize'},
+    {id:'rz', wx:sh.cx,       wz:sh.cz-sh.rz, cur:'n-resize'},
+  ];
+  if (sh.type === 'poly') return (sh.points || []).map((p,i) => ({id:`v${i}`, wx:p.x, wz:p.z, cur:'crosshair'}));
+  return [];
+}
+
+// Returns nearest handle within HANDLE_HIT_PX screen pixels, or null
+function hitHandle(sh, sx, sy) {
+  let best = null, bestD = HANDLE_HIT_PX;
+  for (const h of getHandles(sh)) {
+    const sp = w2s(h.wx, h.wz);
+    const d  = Math.hypot(sx - sp.x, sy - sp.y);
+    if (d < bestD) { bestD = d; best = h; }
+  }
+  return best;
+}
+
+function applyResize(sh, handleId, wx, wz) {
+  const orig = S.dragOrigin;
+  if (sh.type === 'rect') {
+    const ox1=Math.min(orig.x1,orig.x2), ox2=Math.max(orig.x1,orig.x2);
+    const oz1=Math.min(orig.z1,orig.z2), oz2=Math.max(orig.z1,orig.z2);
+    const rx=Math.round(wx), rz=Math.round(wz);
+    sh.x1=ox1; sh.x2=ox2; sh.z1=oz1; sh.z2=oz2;
+    switch(handleId) {
+      case 'nw': sh.x1=Math.min(rx,ox2);   sh.z1=Math.min(rz,oz2);   break;
+      case 'ne': sh.x2=Math.max(rx-1,ox1); sh.z1=Math.min(rz,oz2);   break;
+      case 'se': sh.x2=Math.max(rx-1,ox1); sh.z2=Math.max(rz-1,oz1); break;
+      case 'sw': sh.x1=Math.min(rx,ox2);   sh.z2=Math.max(rz-1,oz1); break;
+      case 'n':  sh.z1=Math.min(rz,oz2);   break;
+      case 's':  sh.z2=Math.max(rz-1,oz1); break;
+      case 'e':  sh.x2=Math.max(rx-1,ox1); break;
+      case 'w':  sh.x1=Math.min(rx,ox2);   break;
+    }
+  } else if (sh.type === 'circle') {
+    sh.r = Math.max(1, Math.round(Math.hypot(wx - orig.cx, wz - orig.cz)));
+  } else if (sh.type === 'ellipse') {
+    if (handleId === 'rx') sh.rx = Math.max(1, Math.abs(Math.round(wx - orig.cx)));
+    if (handleId === 'rz') sh.rz = Math.max(1, Math.abs(Math.round(wz - orig.cz)));
+  } else if (sh.type === 'poly' && handleId.startsWith('v')) {
+    const vi = parseInt(handleId.slice(1));
+    if (!isNaN(vi) && vi < sh.points.length) sh.points[vi] = {x:Math.round(wx), z:Math.round(wz)};
+  }
+}
+
+function drawHandles(sh) {
+  const HW = 4;
+  ctx.fillStyle   = '#ffffff';
+  ctx.strokeStyle = '#0969da';
+  ctx.lineWidth   = 1.5;
+  for (const h of getHandles(sh)) {
+    const sp = w2s(h.wx, h.wz);
+    if (sp.x < -HW || sp.x > canvas.width+HW || sp.y < -HW || sp.y > canvas.height+HW) continue;
+    if (sh.type === 'poly') {
+      ctx.beginPath(); ctx.arc(sp.x, sp.y, HW, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    } else {
+      ctx.fillRect(sp.x-HW, sp.y-HW, HW*2, HW*2);
+      ctx.strokeRect(sp.x-HW, sp.y-HW, HW*2, HW*2);
+    }
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 //  Mouse events
 // ════════════════════════════════════════════════════════════════════════════
 function canvasXY(e) {
@@ -738,7 +836,22 @@ canvas.addEventListener('mousedown', e => {
       }
     } else {
       const w = s2w(pos.x, pos.y);
-      // Hit-test shapes (top-most first)
+
+      // 1. Resize handle on the currently-selected shape?
+      if (S.selShape !== null && S.shapes[S.selShape]) {
+        const h = hitHandle(S.shapes[S.selShape], pos.x, pos.y);
+        if (h) {
+          S.resizingShape = true;
+          S.dragShapeIdx  = S.selShape;
+          S.dragOrigin    = JSON.parse(JSON.stringify(S.shapes[S.selShape]));
+          S.resizeHandle  = h;
+          canvas.style.cursor = h.cur;
+          render();
+          return;
+        }
+      }
+
+      // 2. Hit-test shapes for drag / selection
       let hit = null;
       for (let i = S.shapes.length - 1; i >= 0; i--) {
         if (shapeHit(S.shapes[i], w.x, w.z)) { hit = i; break; }
@@ -746,15 +859,13 @@ canvas.addEventListener('mousedown', e => {
       S.selShape = hit;
       if (hit !== null) {
         loadShapeIntoForm(S.shapes[hit]);
-        // Begin drag
         S.draggingShape = true;
         S.dragShapeIdx  = hit;
         S.dragStart     = { x: w.x, z: w.z };
         S.dragOrigin    = JSON.parse(JSON.stringify(S.shapes[hit]));
-        canvas.classList.add('shape-drag');
-        canvas.classList.remove('shape-hover');
+        canvas.style.cursor = 'grabbing';
       } else {
-        // No shape hit — select chunk instead
+        // 3. Select chunk
         const c = chunkOf(w.x, w.z);
         S.selChunk = c;
         updateChunkCard();
@@ -776,6 +887,13 @@ canvas.addEventListener('mousemove', e => {
   document.getElementById('stCursor').innerHTML  = `<b>Cursor:</b> ${Math.floor(w.x)}, ${Math.floor(w.z)}`;
   document.getElementById('stChunk').innerHTML   = `<b>Chunk:</b> ${c.cx}, ${c.cz}`;
   document.getElementById('stRegion').innerHTML  = `<b>Region:</b> r.${rx}.${rz}`;
+
+  if (S.resizingShape) {
+    applyResize(S.shapes[S.dragShapeIdx], S.resizeHandle.id, w.x, w.z);
+    loadShapeIntoForm(S.shapes[S.dragShapeIdx]);
+    render();
+    return;
+  }
 
   if (S.draggingShape) {
     const dx = Math.round(w.x - S.dragStart.x);
@@ -817,26 +935,40 @@ canvas.addEventListener('mousemove', e => {
     return;
   }
 
-  // Hover cursor: show grab hand when over a shape (outside draw mode)
+  // Hover cursor
   if (!S.drawMode) {
+    // Handle proximity on selected shape takes priority
+    if (S.selShape !== null && S.shapes[S.selShape]) {
+      const h = hitHandle(S.shapes[S.selShape], pos.x, pos.y);
+      if (h) { canvas.style.cursor = h.cur; return; }
+    }
+    // Inside any shape → grab
     let over = false;
     for (let i = S.shapes.length - 1; i >= 0; i--) {
       if (shapeHit(S.shapes[i], w.x, w.z)) { over = true; break; }
     }
-    canvas.classList.toggle('shape-hover', over);
+    canvas.style.cursor = over ? 'grab' : '';
   }
 });
 
 canvas.addEventListener('mouseup', e => {
+  if (S.resizingShape && e.button === 0) {
+    S.resizingShape = false;
+    canvas.style.cursor = '';
+    const sh = S.shapes[S.dragShapeIdx], orig = S.dragOrigin;
+    if (sh && orig && JSON.stringify(sh) !== JSON.stringify(orig)) { markDirty(); updateShapeList(); }
+    S.dragShapeIdx = null; S.dragOrigin = null; S.resizeHandle = null;
+    render();
+    return;
+  }
   if (S.draggingShape && e.button === 0) {
     S.draggingShape = false;
-    canvas.classList.remove('shape-drag');
-    const sh = S.shapes[S.dragShapeIdx];
-    const orig = S.dragOrigin;
+    canvas.style.cursor = '';
+    const sh = S.shapes[S.dragShapeIdx], orig = S.dragOrigin;
     if (sh && orig) {
-      const moved = sh.type === 'rect'
-        ? sh.x1 !== orig.x1 || sh.z1 !== orig.z1
-        : sh.cx !== orig.cx || sh.cz !== orig.cz;
+      const moved = sh.type === 'rect'   ? sh.x1!==orig.x1||sh.z1!==orig.z1
+                  : sh.type === 'poly'   ? true
+                  : sh.cx!==orig.cx||sh.cz!==orig.cz;
       if (moved) { markDirty(); updateShapeList(); }
     }
     S.dragShapeIdx = null; S.dragOrigin = null; S.dragStart = null;
@@ -856,23 +988,28 @@ canvas.addEventListener('mouseup', e => {
 });
 
 canvas.addEventListener('mouseleave', () => {
-  if (S.panning) { S.panning = false; canvas.classList.remove('panning'); }
-  if (S.drawing) { S.drawing = false; S.drawP1 = S.drawP2 = null; render(); }
+  if (S.panning)  { S.panning  = false; canvas.classList.remove('panning'); }
+  if (S.drawing)  { S.drawing  = false; S.drawP1 = S.drawP2 = null; render(); }
+  canvas.style.cursor = '';
+  if (S.resizingShape) {
+    S.resizingShape = false;
+    const sh = S.shapes[S.dragShapeIdx], orig = S.dragOrigin;
+    if (sh && orig && JSON.stringify(sh) !== JSON.stringify(orig)) { markDirty(); updateShapeList(); }
+    S.dragShapeIdx = null; S.dragOrigin = null; S.resizeHandle = null;
+    render();
+  }
   if (S.draggingShape) {
-    // Finalize position wherever the shape landed
     S.draggingShape = false;
-    canvas.classList.remove('shape-drag');
-    const sh = S.shapes[S.dragShapeIdx];
-    const orig = S.dragOrigin;
+    const sh = S.shapes[S.dragShapeIdx], orig = S.dragOrigin;
     if (sh && orig) {
-      const moved = sh.type === 'rect'
-        ? sh.x1 !== orig.x1 || sh.z1 !== orig.z1
-        : sh.cx !== orig.cx || sh.cz !== orig.cz;
+      const moved = sh.type === 'rect'   ? sh.x1!==orig.x1||sh.z1!==orig.z1
+                  : sh.type === 'poly'   ? true
+                  : sh.cx!==orig.cx||sh.cz!==orig.cz;
       if (moved) { markDirty(); updateShapeList(); }
     }
     S.dragShapeIdx = null; S.dragOrigin = null; S.dragStart = null;
+    render();
   }
-  canvas.classList.remove('shape-hover');
 });
 
 canvas.addEventListener('wheel', e => {
@@ -994,6 +1131,7 @@ document.getElementById('btnDrawMode').addEventListener('click', () => {
 
 function enterDrawMode() {
   S.drawMode = true;
+  canvas.style.cursor = '';
   document.getElementById('btnDrawMode').classList.add('active');
   document.getElementById('drawBadge').classList.add('on');
   canvas.classList.add('drawing');
@@ -1003,6 +1141,7 @@ function exitDrawMode() {
   S.drawMode = false;
   S.drawing  = false;
   S.drawP1   = S.drawP2 = null;
+  canvas.style.cursor = '';
   document.getElementById('btnDrawMode').classList.remove('active');
   document.getElementById('drawBadge').classList.remove('on');
   canvas.classList.remove('drawing');
