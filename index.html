@@ -89,6 +89,12 @@ canvas.drawing{cursor:crosshair}
 .modal-footer{display:flex;justify-content:flex-end;gap:8px}
 .modal-empty{color:#8c959f;font-size:0.82rem;text-align:center;padding:16px}
 
+/* ── Shape type toolbar ── */
+.shape-toolbar{display:flex;gap:3px;margin-bottom:8px}
+.tool-btn{flex:1;padding:7px 2px;border:1px solid #d0d7de;background:#f6f8fa;border-radius:5px;cursor:pointer;font-size:1.05rem;line-height:1;color:#57606a;text-align:center;transition:all .15s}
+.tool-btn:hover{border-color:#0969da;color:#0969da;background:#f0f7ff}
+.tool-btn.active{border-color:#0969da;background:#ddf4ff;color:#0969da}
+
 /* ── Color swatches ── */
 .color-swatches{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:4px}
 .cswatch{width:22px;height:22px;border-radius:4px;cursor:pointer;border:2px solid transparent;flex-shrink:0;transition:transform .1s,border-color .1s;position:relative}
@@ -184,18 +190,24 @@ footer span b{color:#57606a}
         <input type="file" id="mapImgInput" accept="image/*" style="display:none">
       </div>
 
-      <!-- Add Shape -->
+      <!-- Tools -->
       <div class="section">
-        <div class="sec-title" id="shapeSectionTitle">Add Shape</div>
-        <div class="field">
-          <label>Type</label>
-          <select id="shapeType">
-            <option value="rect">Rectangle</option>
-            <option value="circle">Circle</option>
-            <option value="ellipse">Ellipse</option>
-            <option value="poly">Free Draw</option>
-            <option value="line">Line Segment</option>
-          </select>
+        <div class="sec-title">Tools</div>
+        <div id="shapeMode" style="font-size:0.65rem;color:#8c959f;margin-bottom:6px">Click a shape to select it</div>
+        <!-- hidden select keeps existing JS working -->
+        <select id="shapeType" style="display:none">
+          <option value="rect">Rectangle</option>
+          <option value="circle">Circle</option>
+          <option value="ellipse">Ellipse</option>
+          <option value="poly">Free Draw</option>
+          <option value="line">Line Segment</option>
+        </select>
+        <div class="shape-toolbar" id="shapeToolbar">
+          <button class="tool-btn active" data-tool="pointer" title="Select / Move">↖</button>
+          <button class="tool-btn"        data-tool="rect"    title="Rectangle (Shift = Square)">▭</button>
+          <button class="tool-btn"        data-tool="ellipse" title="Ellipse (Shift = Circle)">⬭</button>
+          <button class="tool-btn"        data-tool="poly"    title="Free Draw">✏</button>
+          <button class="tool-btn"        data-tool="line"    title="Line Segment">╱</button>
         </div>
         <div class="field"><label>Name</label><input type="text" id="shapeName" placeholder="My Base"></div>
         <div class="field">
@@ -269,12 +281,10 @@ footer span b{color:#57606a}
           <div id="lineDims" style="font-size:0.72rem;color:#0969da;text-align:center;font-family:monospace;margin-top:2px"></div>
         </div>
 
-        <div style="display:flex;gap:6px;margin-top:6px">
-          <button class="btn" id="btnDrawMode" style="flex:1">Draw on Map</button>
-          <button class="btn primary" id="btnAddShape" style="flex:1">Add</button>
+        <div style="margin-top:6px">
+          <button class="btn primary full-btn" id="btnAddShape">Add from coords</button>
         </div>
         <button class="btn" id="btnNewShape" style="width:100%;margin-top:5px;display:none">+ New Shape</button>
-        <div id="shapeFormHint" style="font-size:0.68rem;color:#8c959f;margin-top:5px">Tip: drag on map to draw, or enter coords and click Add</div>
       </div>
 
       <!-- Shape List -->
@@ -361,7 +371,9 @@ const S = {
   selShape: null,      // index
 
   // form state
+  activeTool: 'pointer',
   editMode: false,
+  loadingForm: false,
   openFileHandle: null,
   activePresetName: null,
   dirty: false,
@@ -703,26 +715,20 @@ function drawPreview() {
   ctx.fillStyle   = hex2rgba(color, 0.15);
 
   if (type === 'rect') {
-    const rx1 = Math.round(Math.min(S.drawP1.x, S.drawP2.x));
-    const rz1 = Math.round(Math.min(S.drawP1.z, S.drawP2.z));
-    const rx2 = Math.round(Math.max(S.drawP1.x, S.drawP2.x));
-    const rz2 = Math.round(Math.max(S.drawP1.z, S.drawP2.z));
+    let rx1 = Math.round(Math.min(S.drawP1.x, S.drawP2.x));
+    let rz1 = Math.round(Math.min(S.drawP1.z, S.drawP2.z));
+    let rx2 = Math.round(Math.max(S.drawP1.x, S.drawP2.x));
+    let rz2 = Math.round(Math.max(S.drawP1.z, S.drawP2.z));
+    if (shiftDown) { const sq = Math.min(rx2-rx1, rz2-rz1); rx2=rx1+sq; rz2=rz1+sq; }
     const s1 = w2s(rx1, rz1), s2 = w2s(rx2 + 1, rz2 + 1);
     ctx.fillRect(s1.x, s1.y, s2.x - s1.x, s2.y - s1.y);
     ctx.strokeRect(s1.x, s1.y, s2.x - s1.x, s2.y - s1.y);
-  } else if (type === 'circle') {
-    const sc = w2s(S.drawP1.x, S.drawP1.z);
-    const dx = S.drawP2.x - S.drawP1.x, dz = S.drawP2.z - S.drawP1.z;
-    const r  = Math.hypot(dx, dz) * S.zoom;
-    ctx.beginPath();
-    ctx.arc(sc.x, sc.y, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
   } else if (type === 'ellipse') {
-    const rx1 = Math.round(Math.min(S.drawP1.x, S.drawP2.x));
-    const rz1 = Math.round(Math.min(S.drawP1.z, S.drawP2.z));
-    const rx2 = Math.round(Math.max(S.drawP1.x, S.drawP2.x));
-    const rz2 = Math.round(Math.max(S.drawP1.z, S.drawP2.z));
+    let rx1 = Math.round(Math.min(S.drawP1.x, S.drawP2.x));
+    let rz1 = Math.round(Math.min(S.drawP1.z, S.drawP2.z));
+    let rx2 = Math.round(Math.max(S.drawP1.x, S.drawP2.x));
+    let rz2 = Math.round(Math.max(S.drawP1.z, S.drawP2.z));
+    if (shiftDown) { const sq = Math.min(rx2-rx1, rz2-rz1); rx2=rx1+sq; rz2=rz1+sq; }
     const scx = (rx1 + rx2) / 2, scz = (rz1 + rz2) / 2;
     const erx = Math.max((rx2 - rx1) / 2 * S.zoom, 0.1);
     const erz = Math.max((rz2 - rz1) / 2 * S.zoom, 0.1);
@@ -733,8 +739,13 @@ function drawPreview() {
     ctx.stroke();
   } else if (type === 'line') {
     const bw = (+document.getElementById('lineWidth').value || 1) * S.zoom;
-    const s1 = w2s(Math.round(S.drawP1.x) + 0.5, Math.round(S.drawP1.z) + 0.5);
-    const s2 = w2s(Math.round(S.drawP2.x) + 0.5, Math.round(S.drawP2.z) + 0.5);
+    let ex = Math.round(S.drawP2.x), ez = Math.round(S.drawP2.z);
+    const ox = Math.round(S.drawP1.x), oz = Math.round(S.drawP1.z);
+    if (shiftDown) {
+      if (Math.abs(ex - ox) >= Math.abs(ez - oz)) ez = oz; // horizontal
+      else ex = ox;                                          // vertical
+    }
+    const s1 = w2s(ox + 0.5, oz + 0.5), s2 = w2s(ex + 0.5, ez + 0.5);
     ctx.lineWidth = bw;
     ctx.lineCap   = 'square';
     ctx.beginPath(); ctx.moveTo(s1.x, s1.y); ctx.lineTo(s2.x, s2.y); ctx.stroke();
@@ -897,6 +908,21 @@ canvas.addEventListener('mousedown', e => {
   if (e.button === 0) {
     if (S.drawMode) {
       const w = s2w(pos.x, pos.y);
+
+      // Click on an existing shape → exit draw mode and select it
+      let hit = null;
+      for (let i = S.shapes.length - 1; i >= 0; i--) {
+        if (shapeHit(S.shapes[i], w.x, w.z)) { hit = i; break; }
+      }
+      if (hit !== null) {
+        exitDrawMode();
+        S.selShape = hit;
+        loadShapeIntoForm(S.shapes[hit]);
+        updateShapeList();
+        render();
+        return;
+      }
+
       S.drawing = true;
       S.drawP1  = w;
       S.drawP2  = w;
@@ -1165,7 +1191,12 @@ inlineInput.addEventListener('keydown', e => {
 inlineInput.addEventListener('blur', commitInlineEdit);
 
 
+window.addEventListener('keyup', e => {
+  if (e.key === 'Shift') { shiftDown = false; if (S.drawing) render(); }
+});
+
 window.addEventListener('keydown', e => {
+  if (e.key === 'Shift') { shiftDown = true; if (S.drawing) render(); }
   if (e.key === 'Escape' && inlineIdx !== null) { cancelInlineEdit(); return; }
   if (e.key === 'Escape' && S.drawMode) exitDrawMode();
   if ((e.key === 'Delete' || e.key === 'Backspace') && S.selShape !== null) {
@@ -1240,17 +1271,42 @@ document.getElementById('btnGoto').addEventListener('click', () => {
 );
 
 // ════════════════════════════════════════════════════════════════════════════
-//  Shape type toggle
+//  Shape type toolbar
 // ════════════════════════════════════════════════════════════════════════════
-document.getElementById('shapeType').addEventListener('change', function() {
-  const v = this.value;
-  document.getElementById('rectFields').style.display    = v === 'rect'    ? '' : 'none';
-  document.getElementById('circleFields').style.display  = v === 'circle'  ? '' : 'none';
-  document.getElementById('ellipseFields').style.display = v === 'ellipse' ? '' : 'none';
-  document.getElementById('polyFields').style.display    = v === 'poly'    ? '' : 'none';
-  document.getElementById('lineFields').style.display    = v === 'line'    ? '' : 'none';
-  document.getElementById('fillField').style.display     = v === 'line'    ? 'none' : '';
-  document.getElementById('lineWidthField').style.display= v === 'line'    ? '' : 'none';
+function setShapeType(type) {
+  document.getElementById('shapeType').value = type;
+  document.getElementById('rectFields').style.display    = type === 'rect'    ? '' : 'none';
+  document.getElementById('circleFields').style.display  = type === 'circle'  ? '' : 'none';
+  document.getElementById('ellipseFields').style.display = type === 'ellipse' ? '' : 'none';
+  document.getElementById('polyFields').style.display    = type === 'poly'    ? '' : 'none';
+  document.getElementById('lineFields').style.display    = type === 'line'    ? '' : 'none';
+  document.getElementById('fillField').style.display     = type === 'line'    ? 'none' : '';
+  document.getElementById('lineWidthField').style.display= type === 'line'    ? '' : 'none';
+  // Toolbar highlight managed solely by setActiveTool
+}
+
+function setActiveTool(tool) {
+  S.activeTool = tool;
+  document.querySelectorAll('.tool-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.tool === tool)
+  );
+}
+
+document.querySelectorAll('.tool-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tool = btn.dataset.tool;
+    if (tool === 'pointer') {
+      exitDrawMode(); // always returns to pointer (exitDrawMode calls setActiveTool)
+      return;
+    }
+    if (S.activeTool === tool && S.drawMode) {
+      exitDrawMode(); // toggle: clicking active draw tool exits to pointer
+    } else {
+      setShapeType(tool);
+      setActiveTool(tool);
+      if (!S.drawMode) enterDrawMode();
+    }
+  });
 });
 
 // ── Dimension readouts ────────────────────────────────────────────────────
@@ -1282,14 +1338,25 @@ function updateLineDims() {
 // ════════════════════════════════════════════════════════════════════════════
 //  Draw mode
 // ════════════════════════════════════════════════════════════════════════════
-document.getElementById('btnDrawMode').addEventListener('click', () => {
-  S.drawMode ? exitDrawMode() : enterDrawMode();
-});
+let shiftDown = false;
+
+const DRAW_HINTS = {
+  rect:    'drag to place · Shift = square',
+  ellipse: 'drag to place · Shift = circle',
+  poly:    'hold and drag to trace',
+  line:    'drag to place · Shift = horizontal/vertical',
+};
+
+function updateDrawBadge() {
+  const type = document.getElementById('shapeType').value;
+  document.getElementById('drawBadge').textContent =
+    `DRAW MODE — ${DRAW_HINTS[type] || 'drag to place'} · ESC to cancel`;
+}
 
 function enterDrawMode() {
   S.drawMode = true;
   canvas.style.cursor = '';
-  document.getElementById('btnDrawMode').classList.add('active');
+  updateDrawBadge();
   document.getElementById('drawBadge').classList.add('on');
   canvas.classList.add('drawing');
 }
@@ -1299,9 +1366,11 @@ function exitDrawMode() {
   S.drawing  = false;
   S.drawP1   = S.drawP2 = null;
   canvas.style.cursor = '';
-  document.getElementById('btnDrawMode').classList.remove('active');
   document.getElementById('drawBadge').classList.remove('on');
   canvas.classList.remove('drawing');
+  S.selShape = null;
+  resetShapeForm();
+  setActiveTool('pointer');
   render();
 }
 
@@ -1313,57 +1382,53 @@ function finishDraw() {
   let sh;
 
   if (type === 'rect') {
-    const x1 = Math.round(Math.min(S.drawP1.x, S.drawP2.x));
-    const z1 = Math.round(Math.min(S.drawP1.z, S.drawP2.z));
-    const x2 = Math.round(Math.max(S.drawP1.x, S.drawP2.x));
-    const z2 = Math.round(Math.max(S.drawP1.z, S.drawP2.z));
+    let x1 = Math.round(Math.min(S.drawP1.x, S.drawP2.x));
+    let z1 = Math.round(Math.min(S.drawP1.z, S.drawP2.z));
+    let x2 = Math.round(Math.max(S.drawP1.x, S.drawP2.x));
+    let z2 = Math.round(Math.max(S.drawP1.z, S.drawP2.z));
+    if (shiftDown) { const sq = Math.min(x2-x1, z2-z1); x2=x1+sq; z2=z1+sq; }
     sh = { type:'rect', name, color, fill, x1, z1, x2, z2 };
-    document.getElementById('sx1').value = x1;
-    document.getElementById('sz1').value = z1;
-    document.getElementById('sx2').value = x2;
-    document.getElementById('sz2').value = z2;
-  } else if (type === 'circle') {
-    const dx = S.drawP2.x - S.drawP1.x, dz = S.drawP2.z - S.drawP1.z;
-    const r  = Math.round(Math.hypot(dx, dz));
-    const cx = Math.round(S.drawP1.x), cz = Math.round(S.drawP1.z);
-    sh = { type:'circle', name, color, fill, cx, cz, r };
-    document.getElementById('scx').value = cx;
-    document.getElementById('scz').value = cz;
-    document.getElementById('sr').value  = r;
+    document.getElementById('sx1').value = x1; document.getElementById('sz1').value = z1;
+    document.getElementById('sx2').value = x2; document.getElementById('sz2').value = z2;
   } else if (type === 'ellipse') {
-    const x1 = Math.round(Math.min(S.drawP1.x, S.drawP2.x));
-    const z1 = Math.round(Math.min(S.drawP1.z, S.drawP2.z));
-    const x2 = Math.round(Math.max(S.drawP1.x, S.drawP2.x));
-    const z2 = Math.round(Math.max(S.drawP1.z, S.drawP2.z));
-    const cx = Math.round((x1 + x2) / 2), cz = Math.round((z1 + z2) / 2);
-    const rx = Math.round((x2 - x1) / 2), rz = Math.round((z2 - z1) / 2);
+    let x1 = Math.round(Math.min(S.drawP1.x, S.drawP2.x));
+    let z1 = Math.round(Math.min(S.drawP1.z, S.drawP2.z));
+    let x2 = Math.round(Math.max(S.drawP1.x, S.drawP2.x));
+    let z2 = Math.round(Math.max(S.drawP1.z, S.drawP2.z));
+    if (shiftDown) { const sq = Math.min(x2-x1, z2-z1); x2=x1+sq; z2=z1+sq; }
+    const cx = Math.round((x1+x2)/2), cz = Math.round((z1+z2)/2);
+    const rx = Math.round((x2-x1)/2), rz = Math.round((z2-z1)/2);
     sh = { type:'ellipse', name, color, fill, cx, cz, rx, rz };
-    document.getElementById('secx').value = cx;
-    document.getElementById('secz').value = cz;
-    document.getElementById('serx').value = rx;
-    document.getElementById('serz').value = rz;
+    document.getElementById('secx').value = cx; document.getElementById('secz').value = cz;
+    document.getElementById('serx').value = rx; document.getElementById('serz').value = rz;
   } else if (type === 'poly') {
     if (S.drawPolyPoints.length < 3) return;
     sh = { type:'poly', name, color, fill, points: [...S.drawPolyPoints] };
     S.drawPolyPoints = [];
   } else if (type === 'line') {
     const x1 = Math.round(S.drawP1.x), z1 = Math.round(S.drawP1.z);
-    const x2 = Math.round(S.drawP2.x), z2 = Math.round(S.drawP2.z);
+    let   x2 = Math.round(S.drawP2.x), z2 = Math.round(S.drawP2.z);
+    if (shiftDown) {
+      if (Math.abs(x2 - x1) >= Math.abs(z2 - z1)) z2 = z1; // horizontal
+      else x2 = x1;                                           // vertical
+    }
     sh = { type:'line', name, color, lineWidth: +(document.getElementById('lineWidth').value||1), x1, z1, x2, z2 };
     document.getElementById('slx1').value = x1; document.getElementById('slz1').value = z1;
     document.getElementById('slx2').value = x2; document.getElementById('slz2').value = z2;
   }
 
   if ((type === 'rect'    && (sh.x2 - sh.x1 < 1 || sh.z2 - sh.z1 < 1)) ||
-      (type === 'circle'  && sh.r  < 1) ||
       (type === 'ellipse' && (sh.rx < 1 || sh.rz < 1)) ||
       (type === 'line'    && Math.hypot(sh.x2-sh.x1, sh.z2-sh.z1) < 1)) return; // too tiny
 
   S.shapes.push(sh);
   S.selShape = S.shapes.length - 1;
+  document.getElementById('shapeName').value = sh.name; // sync field so liveUpdate reads correctly
   markDirty();
   updateShapeList();
-  exitDrawMode();
+  document.getElementById('shapeMode').textContent = `Editing: ${sh.name || 'shape'}`;
+  // Stay in draw mode — user can immediately draw another of the same type.
+  // ESC or clicking the active toolbar button exits draw mode.
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1428,25 +1493,17 @@ document.getElementById('btnNewShape').addEventListener('click', resetShapeForm)
 
 function resetShapeForm() {
   S.editMode = false;
-  document.getElementById('shapeSectionTitle').textContent = 'Add Shape';
-  document.getElementById('btnAddShape').textContent = 'Add';
+  document.getElementById('shapeMode').textContent = 'Click a shape to select it';
+  document.getElementById('btnAddShape').style.display = '';
   document.getElementById('btnNewShape').style.display = 'none';
-  document.getElementById('shapeFormHint').style.display = '';
   document.getElementById('shapeName').value = '';
   document.getElementById('shapeFill').value  = '0.3';
   setColor('#388bfd');
   document.getElementById('shapeType').value  = 'rect';
   document.getElementById('sx1').value = 0; document.getElementById('sz1').value = 0;
   document.getElementById('sx2').value = 32; document.getElementById('sz2').value = 32;
-  document.getElementById('rectFields').style.display    = '';
-  document.getElementById('circleFields').style.display  = 'none';
-  document.getElementById('ellipseFields').style.display = 'none';
-  document.getElementById('polyFields').style.display    = 'none';
-  document.getElementById('lineFields').style.display    = 'none';
-  document.getElementById('fillField').style.display     = '';
-  document.getElementById('lineWidthField').style.display= 'none';
-  document.getElementById('lineDims').textContent        = '';
-  document.getElementById('shapeType').value             = 'rect';
+  setShapeType('rect');
+  document.getElementById('lineDims').textContent = '';
   updateRectDims();
   document.getElementById('circleDims').textContent   = '';
   document.getElementById('ellipseDims').textContent  = '';
@@ -1455,23 +1512,14 @@ function resetShapeForm() {
 
 function loadShapeIntoForm(sh) {
   S.editMode = true;
-  document.getElementById('shapeSectionTitle').textContent = 'Edit Shape';
-  document.getElementById('btnAddShape').textContent = 'Update';
+  S.loadingForm = true;
+  document.getElementById('shapeMode').textContent = `Editing: ${sh.name || 'shape'}`;
+  document.getElementById('btnAddShape').style.display = 'none';
   document.getElementById('btnNewShape').style.display = '';
-  document.getElementById('shapeFormHint').style.display = 'none';
-
-  document.getElementById('shapeType').value = sh.type;
+  setShapeType(sh.type);
   document.getElementById('shapeName').value  = sh.name;
   document.getElementById('shapeFill').value  = sh.fill ?? '0.3';
   setColor(sh.color);
-
-  document.getElementById('rectFields').style.display    = sh.type === 'rect'    ? '' : 'none';
-  document.getElementById('circleFields').style.display  = sh.type === 'circle'  ? '' : 'none';
-  document.getElementById('ellipseFields').style.display = sh.type === 'ellipse' ? '' : 'none';
-  document.getElementById('polyFields').style.display    = sh.type === 'poly'    ? '' : 'none';
-  document.getElementById('lineFields').style.display    = sh.type === 'line'    ? '' : 'none';
-  document.getElementById('fillField').style.display     = sh.type === 'line'    ? 'none' : '';
-  document.getElementById('lineWidthField').style.display= sh.type === 'line'    ? '' : 'none';
 
   if (sh.type === 'rect') {
     document.getElementById('sx1').value = sh.x1;
@@ -1498,7 +1546,56 @@ function loadShapeIntoForm(sh) {
     document.getElementById('lineWidth').value = sh.lineWidth || 1;
     updateLineDims();
   }
+  S.loadingForm = false;
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Live shape editing
+// ════════════════════════════════════════════════════════════════════════════
+function liveUpdateShape() {
+  if (S.selShape === null || S.loadingForm) return;
+  const sh = S.shapes[S.selShape];
+  if (!sh) return;
+
+  sh.name  = document.getElementById('shapeName').value;
+  sh.color = document.getElementById('shapeColor').value;
+  if (sh.type !== 'line') sh.fill = document.getElementById('shapeFill').value;
+  if (sh.type === 'line') sh.lineWidth = +(document.getElementById('lineWidth').value || 1);
+
+  if (sh.type === 'rect') {
+    sh.x1 = +document.getElementById('sx1').value || 0;
+    sh.z1 = +document.getElementById('sz1').value || 0;
+    sh.x2 = +document.getElementById('sx2').value || 0;
+    sh.z2 = +document.getElementById('sz2').value || 0;
+  } else if (sh.type === 'ellipse') {
+    sh.cx = +document.getElementById('secx').value || 0;
+    sh.cz = +document.getElementById('secz').value || 0;
+    sh.rx = Math.max(1, +document.getElementById('serx').value || 1);
+    sh.rz = Math.max(1, +document.getElementById('serz').value || 1);
+  } else if (sh.type === 'line') {
+    sh.x1 = +document.getElementById('slx1').value || 0;
+    sh.z1 = +document.getElementById('slz1').value || 0;
+    sh.x2 = +document.getElementById('slx2').value || 0;
+    sh.z2 = +document.getElementById('slz2').value || 0;
+  }
+
+  // Update mode line to reflect any name change
+  document.getElementById('shapeMode').textContent = `Editing: ${sh.name || 'shape'}`;
+  markDirty();
+  updateShapeList();
+  render();
+}
+
+// Hook live updates to all form fields
+['shapeName'].forEach(id =>
+  document.getElementById(id).addEventListener('input', liveUpdateShape)
+);
+['shapeFill','lineWidth'].forEach(id =>
+  document.getElementById(id).addEventListener('change', liveUpdateShape)
+);
+['sx1','sz1','sx2','sz2','secx','secz','serx','serz','slx1','slz1','slx2','slz2'].forEach(id =>
+  document.getElementById(id).addEventListener('input', liveUpdateShape)
+);
 
 // ════════════════════════════════════════════════════════════════════════════
 //  Shape list UI
@@ -1513,7 +1610,7 @@ function updateShapeList() {
     <div class="shape-item ${i === S.selShape ? 'sel' : ''}" onclick="selectShape(${i})">
       <div class="swatch ${sh.type === 'rect' ? 'rect' : ''}" style="background:${sh.color}"></div>
       <span class="shape-name">${escHtml(sh.name)}</span>
-      <span class="shape-type">${{rect:'▭',circle:'◯',ellipse:'⬭',poly:'✏',line:'╱'}[sh.type] ?? '?'}</span>
+      <span class="shape-type">${{rect:'▭',circle:'⬭',ellipse:'⬭',poly:'✏',line:'╱'}[sh.type] ?? '?'}</span>
       <button class="shape-del" title="Delete" onclick="event.stopPropagation();deleteShape(${i})">✕</button>
     </div>`
   ).join('');
@@ -1730,7 +1827,11 @@ function loadData(data) {
     S.cz   = data.view.cz   ?? data.view.z ?? 0;
     S.zoom = data.view.zoom  ?? 5;
   }
-  if (Array.isArray(data.shapes)) S.shapes = data.shapes;
+  if (Array.isArray(data.shapes)) S.shapes = data.shapes.map(sh =>
+    sh.type === 'circle'
+      ? { type:'ellipse', name:sh.name, color:sh.color, fill:sh.fill, cx:sh.cx, cz:sh.cz, rx:sh.r, rz:sh.r }
+      : sh
+  );
 
   const imgSrc = data.mapImage && (data.mapImage.data || data.mapImage.url);
   if (imgSrc) {
@@ -1971,7 +2072,7 @@ function initColorSwatches() {
     el.style.background = hex;
     el.dataset.color = hex;
     el.title = hex;
-    el.addEventListener('click', () => setColor(hex));
+    el.addEventListener('click', () => { setColor(hex); liveUpdateShape(); });
     wrap.appendChild(el);
   });
 
@@ -1981,7 +2082,7 @@ function initColorSwatches() {
   preview.id = 'customPreviewSwatch';
   preview.title = 'Current custom color';
   preview.style.display = 'none';
-  preview.addEventListener('click', () => input.click());
+  preview.addEventListener('click', () => { input.click(); });
   wrap.appendChild(preview);
 
   // Rainbow "open picker" tile
@@ -1991,12 +2092,12 @@ function initColorSwatches() {
   rainbow.addEventListener('click', () => input.click());
   wrap.appendChild(rainbow);
 
-  input.addEventListener('input', () => setColor(input.value));
+  input.addEventListener('input', () => { setColor(input.value); liveUpdateShape(); });
 
   setColor(input.value);
 }
 
-function setColor(hex) {
+function setColor(hex, _internal = false) {
   document.getElementById('shapeColor').value = hex;
   const lc = hex.toLowerCase();
 
