@@ -190,6 +190,8 @@ footer span b{color:#57606a}
           <select id="shapeType">
             <option value="rect">Rectangle</option>
             <option value="circle">Circle</option>
+            <option value="ellipse">Ellipse</option>
+            <option value="poly">Free Draw</option>
           </select>
         </div>
         <div class="field"><label>Name</label><input type="text" id="shapeName" placeholder="My Base"></div>
@@ -227,6 +229,22 @@ footer span b{color:#57606a}
           </div>
           <div class="field"><label>Radius</label><input type="number" id="sr" value="16"></div>
           <div id="circleDims" style="font-size:0.72rem;color:#0969da;text-align:center;font-family:monospace;margin-top:2px"></div>
+        </div>
+        <!-- Ellipse coords -->
+        <div id="ellipseFields" style="display:none">
+          <div class="row2">
+            <div class="field"><label>CX</label><input type="number" id="secx" value="0"></div>
+            <div class="field"><label>CZ</label><input type="number" id="secz" value="0"></div>
+          </div>
+          <div class="row2">
+            <div class="field"><label>RX</label><input type="number" id="serx" value="16"></div>
+            <div class="field"><label>RZ</label><input type="number" id="serz" value="8"></div>
+          </div>
+          <div id="ellipseDims" style="font-size:0.72rem;color:#0969da;text-align:center;font-family:monospace;margin-top:2px"></div>
+        </div>
+        <!-- Free draw -->
+        <div id="polyFields" style="display:none">
+          <div id="polyInfo" style="font-size:0.72rem;color:#8c959f;text-align:center;padding:6px 0">Hold and drag on the map to trace the shape</div>
         </div>
 
         <div style="display:flex;gap:6px;margin-top:6px">
@@ -308,6 +326,7 @@ const S = {
   dirty: false,
 
   // shape drag
+  drawPolyPoints: [],
   draggingShape: false,
   dragShapeIdx: null,
   dragStart: null,
@@ -566,7 +585,7 @@ function drawShape(sh, selected) {
     ctx.strokeRect(s1.x, s1.y, sw, sh2);
     ctx.setLineDash([]);
     shapeLabel(sh.name, (s1.x + s2.x) / 2, (s1.y + s2.y) / 2, sh.color);
-  } else {
+  } else if (sh.type === 'circle') {
     const sc = w2s(sh.cx, sh.cz);
     const sr = sh.r * S.zoom;
     ctx.fillStyle   = hex2rgba(sh.color, alpha);
@@ -579,6 +598,40 @@ function drawShape(sh, selected) {
     ctx.stroke();
     ctx.setLineDash([]);
     shapeLabel(sh.name, sc.x, sc.y, sh.color);
+  } else if (sh.type === 'ellipse') {
+    const sc = w2s(sh.cx, sh.cz);
+    const erx = sh.rx * S.zoom, erz = sh.rz * S.zoom;
+    ctx.fillStyle   = hex2rgba(sh.color, alpha);
+    ctx.beginPath();
+    ctx.ellipse(sc.x, sc.y, Math.max(erx, 0.1), Math.max(erz, 0.1), 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = sh.color;
+    ctx.lineWidth   = lw;
+    if (selected) { ctx.setLineDash([5,3]); }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    shapeLabel(sh.name, sc.x, sc.y, sh.color);
+  } else if (sh.type === 'poly') {
+    if (!sh.points || sh.points.length < 2) return;
+    ctx.beginPath();
+    const p0 = w2s(sh.points[0].x, sh.points[0].z);
+    ctx.moveTo(p0.x, p0.y);
+    for (let i = 1; i < sh.points.length; i++) {
+      const p = w2s(sh.points[i].x, sh.points[i].z);
+      ctx.lineTo(p.x, p.y);
+    }
+    ctx.closePath();
+    ctx.fillStyle   = hex2rgba(sh.color, alpha);
+    ctx.fill();
+    ctx.strokeStyle = sh.color;
+    ctx.lineWidth   = lw;
+    if (selected) { ctx.setLineDash([5,3]); }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    const pcx = sh.points.reduce((s, p) => s + p.x, 0) / sh.points.length;
+    const pcz = sh.points.reduce((s, p) => s + p.z, 0) / sh.points.length;
+    const psc = w2s(pcx, pcz);
+    shapeLabel(sh.name, psc.x, psc.y, sh.color);
   }
 }
 
@@ -591,7 +644,6 @@ function drawPreview() {
   ctx.fillStyle   = hex2rgba(color, 0.15);
 
   if (type === 'rect') {
-    // Snap preview to block grid to match what finishDraw will produce
     const rx1 = Math.round(Math.min(S.drawP1.x, S.drawP2.x));
     const rz1 = Math.round(Math.min(S.drawP1.z, S.drawP2.z));
     const rx2 = Math.round(Math.max(S.drawP1.x, S.drawP2.x));
@@ -599,7 +651,7 @@ function drawPreview() {
     const s1 = w2s(rx1, rz1), s2 = w2s(rx2 + 1, rz2 + 1);
     ctx.fillRect(s1.x, s1.y, s2.x - s1.x, s2.y - s1.y);
     ctx.strokeRect(s1.x, s1.y, s2.x - s1.x, s2.y - s1.y);
-  } else {
+  } else if (type === 'circle') {
     const sc = w2s(S.drawP1.x, S.drawP1.z);
     const dx = S.drawP2.x - S.drawP1.x, dz = S.drawP2.z - S.drawP1.z;
     const r  = Math.hypot(dx, dz) * S.zoom;
@@ -607,6 +659,28 @@ function drawPreview() {
     ctx.arc(sc.x, sc.y, r, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+  } else if (type === 'ellipse') {
+    const rx1 = Math.round(Math.min(S.drawP1.x, S.drawP2.x));
+    const rz1 = Math.round(Math.min(S.drawP1.z, S.drawP2.z));
+    const rx2 = Math.round(Math.max(S.drawP1.x, S.drawP2.x));
+    const rz2 = Math.round(Math.max(S.drawP1.z, S.drawP2.z));
+    const scx = (rx1 + rx2) / 2, scz = (rz1 + rz2) / 2;
+    const erx = Math.max((rx2 - rx1) / 2 * S.zoom, 0.1);
+    const erz = Math.max((rz2 - rz1) / 2 * S.zoom, 0.1);
+    const sc = w2s(scx, scz);
+    ctx.beginPath();
+    ctx.ellipse(sc.x, sc.y, erx, erz, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  } else if (type === 'poly' && S.drawPolyPoints.length > 0) {
+    ctx.beginPath();
+    const p0 = w2s(S.drawPolyPoints[0].x, S.drawPolyPoints[0].z);
+    ctx.moveTo(p0.x, p0.y);
+    for (let i = 1; i < S.drawPolyPoints.length; i++) {
+      const p = w2s(S.drawPolyPoints[i].x, S.drawPolyPoints[i].z);
+      ctx.lineTo(p.x, p.y);
+    }
+    ctx.stroke(); // open path preview — don't fill until closed
   }
   ctx.setLineDash([]);
 }
@@ -659,6 +733,9 @@ canvas.addEventListener('mousedown', e => {
       S.drawing = true;
       S.drawP1  = w;
       S.drawP2  = w;
+      if (document.getElementById('shapeType').value === 'poly') {
+        S.drawPolyPoints = [{ x: Math.round(w.x), z: Math.round(w.z) }];
+      }
     } else {
       const w = s2w(pos.x, pos.y);
       // Hit-test shapes (top-most first)
@@ -708,6 +785,8 @@ canvas.addEventListener('mousemove', e => {
     if (sh.type === 'rect') {
       sh.x1 = orig.x1 + dx; sh.z1 = orig.z1 + dz;
       sh.x2 = orig.x2 + dx; sh.z2 = orig.z2 + dz;
+    } else if (sh.type === 'poly') {
+      sh.points = orig.points.map(p => ({ x: p.x + dx, z: p.z + dz }));
     } else {
       sh.cx = orig.cx + dx; sh.cz = orig.cz + dz;
     }
@@ -727,6 +806,13 @@ canvas.addEventListener('mousemove', e => {
 
   if (S.drawing) {
     S.drawP2 = s2w(pos.x, pos.y);
+    if (document.getElementById('shapeType').value === 'poly') {
+      const px = Math.round(S.drawP2.x), pz = Math.round(S.drawP2.z);
+      const last = S.drawPolyPoints[S.drawPolyPoints.length - 1];
+      if (!last || last.x !== px || last.z !== pz) {
+        S.drawPolyPoints.push({ x: px, z: pz });
+      }
+    }
     render();
     return;
   }
@@ -874,8 +960,10 @@ document.getElementById('btnGoto').addEventListener('click', () => {
 //  Shape type toggle
 // ════════════════════════════════════════════════════════════════════════════
 document.getElementById('shapeType').addEventListener('change', function() {
-  document.getElementById('rectFields').style.display   = this.value === 'rect'   ? '' : 'none';
-  document.getElementById('circleFields').style.display = this.value === 'circle' ? '' : 'none';
+  document.getElementById('rectFields').style.display    = this.value === 'rect'    ? '' : 'none';
+  document.getElementById('circleFields').style.display  = this.value === 'circle'  ? '' : 'none';
+  document.getElementById('ellipseFields').style.display = this.value === 'ellipse' ? '' : 'none';
+  document.getElementById('polyFields').style.display    = this.value === 'poly'    ? '' : 'none';
 });
 
 // ── Dimension readouts ────────────────────────────────────────────────────
@@ -888,8 +976,14 @@ function updateCircleDims() {
   const r = +document.getElementById('sr').value || 0;
   document.getElementById('circleDims').textContent = r ? `diameter: ${r * 2} blocks` : '';
 }
+function updateEllipseDims() {
+  const rx = +document.getElementById('serx').value || 0;
+  const rz = +document.getElementById('serz').value || 0;
+  document.getElementById('ellipseDims').textContent = (rx && rz) ? `${rx * 2} × ${rz * 2} blocks` : '';
+}
 ['sx1','sz1','sx2','sz2'].forEach(id => document.getElementById(id).addEventListener('input', updateRectDims));
 document.getElementById('sr').addEventListener('input', updateCircleDims);
+['serx','serz'].forEach(id => document.getElementById(id).addEventListener('input', updateEllipseDims));
 
 // ════════════════════════════════════════════════════════════════════════════
 //  Draw mode
@@ -932,7 +1026,7 @@ function finishDraw() {
     document.getElementById('sz1').value = z1;
     document.getElementById('sx2').value = x2;
     document.getElementById('sz2').value = z2;
-  } else {
+  } else if (type === 'circle') {
     const dx = S.drawP2.x - S.drawP1.x, dz = S.drawP2.z - S.drawP1.z;
     const r  = Math.round(Math.hypot(dx, dz));
     const cx = Math.round(S.drawP1.x), cz = Math.round(S.drawP1.z);
@@ -940,10 +1034,27 @@ function finishDraw() {
     document.getElementById('scx').value = cx;
     document.getElementById('scz').value = cz;
     document.getElementById('sr').value  = r;
+  } else if (type === 'ellipse') {
+    const x1 = Math.round(Math.min(S.drawP1.x, S.drawP2.x));
+    const z1 = Math.round(Math.min(S.drawP1.z, S.drawP2.z));
+    const x2 = Math.round(Math.max(S.drawP1.x, S.drawP2.x));
+    const z2 = Math.round(Math.max(S.drawP1.z, S.drawP2.z));
+    const cx = Math.round((x1 + x2) / 2), cz = Math.round((z1 + z2) / 2);
+    const rx = Math.round((x2 - x1) / 2), rz = Math.round((z2 - z1) / 2);
+    sh = { type:'ellipse', name, color, fill, cx, cz, rx, rz };
+    document.getElementById('secx').value = cx;
+    document.getElementById('secz').value = cz;
+    document.getElementById('serx').value = rx;
+    document.getElementById('serz').value = rz;
+  } else if (type === 'poly') {
+    if (S.drawPolyPoints.length < 3) return;
+    sh = { type:'poly', name, color, fill, points: [...S.drawPolyPoints] };
+    S.drawPolyPoints = [];
   }
 
-  if ((type === 'rect' && (sh.x2 - sh.x1 < 1 || sh.z2 - sh.z1 < 1)) ||
-      (type === 'circle' && sh.r < 1)) return; // too tiny
+  if ((type === 'rect'    && (sh.x2 - sh.x1 < 1 || sh.z2 - sh.z1 < 1)) ||
+      (type === 'circle'  && sh.r  < 1) ||
+      (type === 'ellipse' && (sh.rx < 1 || sh.rz < 1))) return; // too tiny
 
   S.shapes.push(sh);
   S.selShape = S.shapes.length - 1;
@@ -969,12 +1080,26 @@ document.getElementById('btnAddShape').addEventListener('click', () => {
       x2: +document.getElementById('sx2').value || 32,
       z2: +document.getElementById('sz2').value || 32,
     };
-  } else {
+  } else if (type === 'circle') {
     sh = { type:'circle', name, color, fill,
       cx: +document.getElementById('scx').value || 0,
       cz: +document.getElementById('scz').value || 0,
       r:  +document.getElementById('sr').value  || 16,
     };
+  } else if (type === 'ellipse') {
+    sh = { type:'ellipse', name, color, fill,
+      cx: +document.getElementById('secx').value || 0,
+      cz: +document.getElementById('secz').value || 0,
+      rx: +document.getElementById('serx').value || 16,
+      rz: +document.getElementById('serz').value || 8,
+    };
+  } else if (type === 'poly') {
+    if (S.editMode && S.selShape !== null) {
+      // Update name/color/fill only — preserve existing points
+      S.shapes[S.selShape] = { ...S.shapes[S.selShape], name, color, fill };
+      markDirty(); updateShapeList(); render();
+    }
+    return; // poly shapes must be drawn on the map
   }
 
   if (S.editMode && S.selShape !== null) {
@@ -1003,10 +1128,15 @@ function resetShapeForm() {
   document.getElementById('shapeType').value  = 'rect';
   document.getElementById('sx1').value = 0; document.getElementById('sz1').value = 0;
   document.getElementById('sx2').value = 32; document.getElementById('sz2').value = 32;
-  document.getElementById('rectFields').style.display   = '';
-  document.getElementById('circleFields').style.display = 'none';
+  document.getElementById('rectFields').style.display    = '';
+  document.getElementById('circleFields').style.display  = 'none';
+  document.getElementById('ellipseFields').style.display = 'none';
+  document.getElementById('polyFields').style.display    = 'none';
+  document.getElementById('shapeType').value             = 'rect';
   updateRectDims();
-  document.getElementById('circleDims').textContent = '';
+  document.getElementById('circleDims').textContent   = '';
+  document.getElementById('ellipseDims').textContent  = '';
+  document.getElementById('polyInfo').textContent     = 'Hold and drag on the map to trace the shape';
 }
 
 function loadShapeIntoForm(sh) {
@@ -1021,8 +1151,10 @@ function loadShapeIntoForm(sh) {
   document.getElementById('shapeFill').value  = sh.fill ?? '0.3';
   setColor(sh.color);
 
-  document.getElementById('rectFields').style.display   = sh.type === 'rect'   ? '' : 'none';
-  document.getElementById('circleFields').style.display = sh.type === 'circle' ? '' : 'none';
+  document.getElementById('rectFields').style.display    = sh.type === 'rect'    ? '' : 'none';
+  document.getElementById('circleFields').style.display  = sh.type === 'circle'  ? '' : 'none';
+  document.getElementById('ellipseFields').style.display = sh.type === 'ellipse' ? '' : 'none';
+  document.getElementById('polyFields').style.display    = sh.type === 'poly'    ? '' : 'none';
 
   if (sh.type === 'rect') {
     document.getElementById('sx1').value = sh.x1;
@@ -1030,11 +1162,19 @@ function loadShapeIntoForm(sh) {
     document.getElementById('sx2').value = sh.x2;
     document.getElementById('sz2').value = sh.z2;
     updateRectDims();
-  } else {
+  } else if (sh.type === 'circle') {
     document.getElementById('scx').value = sh.cx;
     document.getElementById('scz').value = sh.cz;
     document.getElementById('sr').value  = sh.r;
     updateCircleDims();
+  } else if (sh.type === 'ellipse') {
+    document.getElementById('secx').value = sh.cx;
+    document.getElementById('secz').value = sh.cz;
+    document.getElementById('serx').value = sh.rx;
+    document.getElementById('serz').value = sh.rz;
+    updateEllipseDims();
+  } else if (sh.type === 'poly') {
+    document.getElementById('polyInfo').textContent = `${sh.points.length} vertices — drag to move`;
   }
 }
 
@@ -1051,7 +1191,7 @@ function updateShapeList() {
     <div class="shape-item ${i === S.selShape ? 'sel' : ''}" onclick="selectShape(${i})">
       <div class="swatch ${sh.type === 'rect' ? 'rect' : ''}" style="background:${sh.color}"></div>
       <span class="shape-name">${escHtml(sh.name)}</span>
-      <span class="shape-type">${sh.type === 'rect' ? '▭' : '◯'}</span>
+      <span class="shape-type">${{rect:'▭',circle:'◯',ellipse:'⬭',poly:'✏'}[sh.type] ?? '?'}</span>
       <button class="shape-del" title="Delete" onclick="event.stopPropagation();deleteShape(${i})">✕</button>
     </div>`
   ).join('');
@@ -1082,7 +1222,26 @@ function shapeHit(sh, wx, wz) {
     const z1 = Math.min(sh.z1,sh.z2), z2 = Math.max(sh.z1,sh.z2) + 1;
     return wx >= x1 && wx < x2 && wz >= z1 && wz < z2;
   }
-  return Math.hypot(wx - sh.cx, wz - sh.cz) <= sh.r;
+  if (sh.type === 'circle') return Math.hypot(wx - sh.cx, wz - sh.cz) <= sh.r;
+  if (sh.type === 'ellipse') {
+    const dx = (wx - sh.cx) / (sh.rx || 1), dz = (wz - sh.cz) / (sh.rz || 1);
+    return dx*dx + dz*dz <= 1;
+  }
+  if (sh.type === 'poly') return polyHit(sh.points, wx, wz);
+  return false;
+}
+
+function polyHit(points, wx, wz) {
+  if (!points || points.length < 3) return false;
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const xi = points[i].x, zi = points[i].z;
+    const xj = points[j].x, zj = points[j].z;
+    if (((zi > wz) !== (zj > wz)) && (wx < (xj - xi) * (wz - zi) / (zj - zi) + xi)) {
+      inside = !inside;
+    }
+  }
+  return inside;
 }
 
 function escHtml(s) {
@@ -1470,6 +1629,7 @@ function setColor(hex) {
 // ════════════════════════════════════════════════════════════════════════════
 document.getElementById('stZoom').innerHTML = `<b>Zoom:</b> ${S.zoom.toFixed(2)}px/u`;
 updateRectDims();
+updateEllipseDims();
 updateMapImageUI();
 document.getElementById('stMode').innerHTML = IS_LOCAL
   ? '<b style="color:#2da44e">Local</b>'
