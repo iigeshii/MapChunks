@@ -70,6 +70,8 @@ header h1{font-size:1rem;color:#0969da;flex:1;white-space:nowrap;font-weight:700
 canvas{display:block;width:100%;height:100%;cursor:crosshair}
 canvas.panning{cursor:grabbing}
 canvas.drawing{cursor:crosshair}
+canvas.shape-hover{cursor:grab}
+canvas.shape-drag{cursor:grabbing}
 
 /* ── Draw mode badge ── */
 .draw-badge{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:#e16f24;color:#fff;padding:4px 14px;border-radius:20px;font-size:0.78rem;font-weight:700;letter-spacing:.04em;display:none;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.2)}
@@ -304,6 +306,12 @@ const S = {
   openFileHandle: null,
   activePresetName: null,
   dirty: false,
+
+  // shape drag
+  draggingShape: false,
+  dragShapeIdx: null,
+  dragStart: null,
+  dragOrigin: null,
 
   // data
   shapes: [],
@@ -652,19 +660,29 @@ canvas.addEventListener('mousedown', e => {
       S.drawP1  = w;
       S.drawP2  = w;
     } else {
-      // Select chunk
       const w = s2w(pos.x, pos.y);
-      const c = chunkOf(w.x, w.z);
-      S.selChunk = c;
-      updateChunkCard();
       // Hit-test shapes (top-most first)
       let hit = null;
       for (let i = S.shapes.length - 1; i >= 0; i--) {
         if (shapeHit(S.shapes[i], w.x, w.z)) { hit = i; break; }
       }
       S.selShape = hit;
-      if (hit !== null) loadShapeIntoForm(S.shapes[hit]);
-      else if (S.editMode) resetShapeForm();
+      if (hit !== null) {
+        loadShapeIntoForm(S.shapes[hit]);
+        // Begin drag
+        S.draggingShape = true;
+        S.dragShapeIdx  = hit;
+        S.dragStart     = { x: w.x, z: w.z };
+        S.dragOrigin    = JSON.parse(JSON.stringify(S.shapes[hit]));
+        canvas.classList.add('shape-drag');
+        canvas.classList.remove('shape-hover');
+      } else {
+        // No shape hit — select chunk instead
+        const c = chunkOf(w.x, w.z);
+        S.selChunk = c;
+        updateChunkCard();
+        if (S.editMode) resetShapeForm();
+      }
       updateShapeList();
       render();
     }
@@ -682,6 +700,22 @@ canvas.addEventListener('mousemove', e => {
   document.getElementById('stChunk').innerHTML   = `<b>Chunk:</b> ${c.cx}, ${c.cz}`;
   document.getElementById('stRegion').innerHTML  = `<b>Region:</b> r.${rx}.${rz}`;
 
+  if (S.draggingShape) {
+    const dx = Math.round(w.x - S.dragStart.x);
+    const dz = Math.round(w.z - S.dragStart.z);
+    const orig = S.dragOrigin;
+    const sh   = S.shapes[S.dragShapeIdx];
+    if (sh.type === 'rect') {
+      sh.x1 = orig.x1 + dx; sh.z1 = orig.z1 + dz;
+      sh.x2 = orig.x2 + dx; sh.z2 = orig.z2 + dz;
+    } else {
+      sh.cx = orig.cx + dx; sh.cz = orig.cz + dz;
+    }
+    loadShapeIntoForm(sh);
+    render();
+    return;
+  }
+
   if (S.panning) {
     const dx = (pos.x - S.panStart.x) / S.zoom;
     const dz = (pos.y - S.panStart.y) / S.zoom;
@@ -694,10 +728,35 @@ canvas.addEventListener('mousemove', e => {
   if (S.drawing) {
     S.drawP2 = s2w(pos.x, pos.y);
     render();
+    return;
+  }
+
+  // Hover cursor: show grab hand when over a shape (outside draw mode)
+  if (!S.drawMode) {
+    let over = false;
+    for (let i = S.shapes.length - 1; i >= 0; i--) {
+      if (shapeHit(S.shapes[i], w.x, w.z)) { over = true; break; }
+    }
+    canvas.classList.toggle('shape-hover', over);
   }
 });
 
 canvas.addEventListener('mouseup', e => {
+  if (S.draggingShape && e.button === 0) {
+    S.draggingShape = false;
+    canvas.classList.remove('shape-drag');
+    const sh = S.shapes[S.dragShapeIdx];
+    const orig = S.dragOrigin;
+    if (sh && orig) {
+      const moved = sh.type === 'rect'
+        ? sh.x1 !== orig.x1 || sh.z1 !== orig.z1
+        : sh.cx !== orig.cx || sh.cz !== orig.cz;
+      if (moved) { markDirty(); updateShapeList(); }
+    }
+    S.dragShapeIdx = null; S.dragOrigin = null; S.dragStart = null;
+    render();
+    return;
+  }
   if (S.panning) {
     S.panning = false;
     canvas.classList.remove('panning');
@@ -713,6 +772,21 @@ canvas.addEventListener('mouseup', e => {
 canvas.addEventListener('mouseleave', () => {
   if (S.panning) { S.panning = false; canvas.classList.remove('panning'); }
   if (S.drawing) { S.drawing = false; S.drawP1 = S.drawP2 = null; render(); }
+  if (S.draggingShape) {
+    // Finalize position wherever the shape landed
+    S.draggingShape = false;
+    canvas.classList.remove('shape-drag');
+    const sh = S.shapes[S.dragShapeIdx];
+    const orig = S.dragOrigin;
+    if (sh && orig) {
+      const moved = sh.type === 'rect'
+        ? sh.x1 !== orig.x1 || sh.z1 !== orig.z1
+        : sh.cx !== orig.cx || sh.cz !== orig.cz;
+      if (moved) { markDirty(); updateShapeList(); }
+    }
+    S.dragShapeIdx = null; S.dragOrigin = null; S.dragStart = null;
+  }
+  canvas.classList.remove('shape-hover');
 });
 
 canvas.addEventListener('wheel', e => {
