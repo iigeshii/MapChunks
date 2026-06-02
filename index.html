@@ -336,7 +336,6 @@ footer span b{color:#57606a}
 <footer>
   <span id="stCursor"><b>Cursor:</b> —</span>
   <span id="stChunk"><b>Chunk:</b> —</span>
-  <span id="stRegion"><b>Region:</b> —</span>
   <span id="stZoom"><b>Zoom:</b> —</span>
   <span id="stMode"></span>
   <span style="margin-left:auto;color:#57606a">© 2025 Gesh Giezel · Map Chunk Tool · Built with Claude</span>
@@ -984,12 +983,9 @@ canvas.addEventListener('mousemove', e => {
   const pos = canvasXY(e);
   const w   = s2w(pos.x, pos.y);
   const c   = chunkOf(w.x, w.z);
-  const rx  = Math.floor(c.cx / 32);
-  const rz  = Math.floor(c.cz / 32);
 
   document.getElementById('stCursor').innerHTML  = `<b>Cursor:</b> ${Math.floor(w.x)}, ${Math.floor(w.z)}`;
   document.getElementById('stChunk').innerHTML   = `<b>Chunk:</b> ${c.cx}, ${c.cz}`;
-  document.getElementById('stRegion').innerHTML  = `<b>Region:</b> r.${rx}.${rz}`;
 
   if (S.resizingShape) {
     applyResize(S.shapes[S.dragShapeIdx], S.resizeHandle.id, w.x, w.z);
@@ -1250,7 +1246,6 @@ function updateChunkCard() {
 
   card.innerHTML = `
     <div class="kv"><span>Chunk</span><span>(${cx}, ${cz})</span></div>
-    <div class="kv"><span>Region</span><span>r.${Math.floor(cx/32)}.${Math.floor(cz/32)}</span></div>
     <div class="kv"><span>X range</span><span>${x1} … ${x2}</span></div>
     <div class="kv"><span>Z range</span><span>${z1} … ${z2}</span></div>
     <div style="font-size:0.65rem;color:#388bfd;margin-top:7px;margin-bottom:3px">Inside Corners</div>
