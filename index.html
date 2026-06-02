@@ -380,6 +380,7 @@ const S = {
   dirty: false,
 
   // shape drag / resize
+  panClickWorld: null,  // world pos of left-click on empty space (for click-vs-drag detection)
   drawPolyPoints: [],
   draggingShape: false,
   resizingShape: false,
@@ -963,11 +964,13 @@ canvas.addEventListener('mousedown', e => {
         S._reselected    = (hit === prevSel);
         canvas.style.cursor = 'grabbing';
       } else {
-        // 3. Select chunk
-        const c = chunkOf(w.x, w.z);
-        S.selChunk = c;
-        updateChunkCard();
+        // 3. Empty space — start pan; defer chunk selection to mouseup if no drag
         if (S.editMode) resetShapeForm();
+        S.panning       = true;
+        S.panStart      = pos;
+        S.panOrigin     = { cx: S.cx, cz: S.cz };
+        S.panClickWorld = { x: w.x, z: w.z };
+        canvas.classList.add('panning');
       }
       updateShapeList();
       render();
@@ -1050,6 +1053,7 @@ canvas.addEventListener('mousemove', e => {
 });
 
 canvas.addEventListener('mouseup', e => {
+  const pos = canvasXY(e);
   if (S.resizingShape && e.button === 0) {
     S.resizingShape = false;
     canvas.style.cursor = '';
@@ -1082,6 +1086,16 @@ canvas.addEventListener('mouseup', e => {
   if (S.panning) {
     S.panning = false;
     canvas.classList.remove('panning');
+    // Left-click that barely moved → treat as chunk select click
+    if (e.button === 0 && S.panClickWorld) {
+      const moved = Math.hypot(pos.x - S.panStart.x, pos.y - S.panStart.y);
+      if (moved < 5) {
+        S.selChunk = chunkOf(S.panClickWorld.x, S.panClickWorld.z);
+        updateChunkCard();
+        render();
+      }
+      S.panClickWorld = null;
+    }
   }
   if (S.drawing && e.button === 0) {
     S.drawing = false;
