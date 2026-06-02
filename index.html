@@ -71,6 +71,9 @@ canvas{display:block;width:100%;height:100%;cursor:crosshair}
 canvas.panning{cursor:grabbing}
 canvas.drawing{cursor:crosshair}
 
+/* ── Inline name editor ── */
+#inlineNameInput{position:absolute;display:none;z-index:20;background:rgba(255,255,255,0.97);border:2px solid #0969da;border-radius:5px;padding:3px 8px;font-size:0.88rem;font-weight:600;color:#1f2328;width:180px;text-align:center;transform:translate(-50%,-50%);box-shadow:0 2px 12px rgba(0,0,0,.18)}
+
 /* ── Draw mode badge ── */
 .draw-badge{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:#e16f24;color:#fff;padding:4px 14px;border-radius:20px;font-size:0.78rem;font-weight:700;letter-spacing:.04em;display:none;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.2)}
 .draw-badge.on{display:block}
@@ -287,6 +290,7 @@ footer span b{color:#57606a}
   <div class="canvas-wrap" id="canvasWrap">
     <canvas id="mapCanvas"></canvas>
     <div class="draw-badge" id="drawBadge">DRAW MODE — drag to place shape · ESC to cancel</div>
+    <input id="inlineNameInput" type="text" maxlength="64">
   </div>
 </div>
 
@@ -901,6 +905,7 @@ canvas.addEventListener('mousedown', e => {
       }
     } else {
       const w = s2w(pos.x, pos.y);
+      const prevSel = S.selShape;
 
       // 1. Resize handle on the currently-selected shape?
       if (S.selShape !== null && S.shapes[S.selShape]) {
@@ -924,10 +929,11 @@ canvas.addEventListener('mousedown', e => {
       S.selShape = hit;
       if (hit !== null) {
         loadShapeIntoForm(S.shapes[hit]);
-        S.draggingShape = true;
-        S.dragShapeIdx  = hit;
-        S.dragStart     = { x: w.x, z: w.z };
-        S.dragOrigin    = JSON.parse(JSON.stringify(S.shapes[hit]));
+        S.draggingShape  = true;
+        S.dragShapeIdx   = hit;
+        S.dragStart      = { x: w.x, z: w.z };
+        S.dragOrigin     = JSON.parse(JSON.stringify(S.shapes[hit]));
+        S._reselected    = (hit === prevSel);
         canvas.style.cursor = 'grabbing';
       } else {
         // 3. Select chunk
@@ -1032,10 +1038,16 @@ canvas.addEventListener('mouseup', e => {
     const sh = S.shapes[S.dragShapeIdx], orig = S.dragOrigin;
     if (sh && orig) {
       const moved = (sh.type==='rect'||sh.type==='line') ? sh.x1!==orig.x1||sh.z1!==orig.z1
-                  : sh.type === 'poly'   ? true
+                  : sh.type==='poly'    ? sh.points.length>0&&(sh.points[0].x!==orig.points[0].x||sh.points[0].z!==orig.points[0].z)
                   : sh.cx!==orig.cx||sh.cz!==orig.cz;
-      if (moved) { markDirty(); updateShapeList(); }
+      if (moved) {
+        markDirty(); updateShapeList();
+      } else if (S._reselected && inlineIdx === null) {
+        startInlineEdit(S.dragShapeIdx);
+      }
     }
+    const idx = S.dragShapeIdx;
+    S._reselected = false;
     S.dragShapeIdx = null; S.dragOrigin = null; S.dragStart = null;
     render();
     return;
@@ -1055,6 +1067,7 @@ canvas.addEventListener('mouseup', e => {
 canvas.addEventListener('mouseleave', () => {
   if (S.panning)  { S.panning  = false; canvas.classList.remove('panning'); }
   if (S.drawing)  { S.drawing  = false; S.drawP1 = S.drawP2 = null; render(); }
+  S._reselected = false;
   canvas.style.cursor = '';
   if (S.resizingShape) {
     S.resizingShape = false;
@@ -1090,7 +1103,70 @@ canvas.addEventListener('wheel', e => {
   render();
 }, { passive: false });
 
+// ── Inline name editing ──────────────────────────────────────────────────
+const inlineInput = document.getElementById('inlineNameInput');
+let inlineIdx = null;
+
+function shapeCenterScreen(sh) {
+  if (sh.type === 'rect') {
+    const x1=Math.min(sh.x1,sh.x2), x2=Math.max(sh.x1,sh.x2)+1;
+    const z1=Math.min(sh.z1,sh.z2), z2=Math.max(sh.z1,sh.z2)+1;
+    return w2s((x1+x2)/2, (z1+z2)/2);
+  }
+  if (sh.type === 'circle' || sh.type === 'ellipse') return w2s(sh.cx, sh.cz);
+  if (sh.type === 'line') {
+    const a=w2s(sh.x1+0.5,sh.z1+0.5), b=w2s(sh.x2+0.5,sh.z2+0.5);
+    return {x:(a.x+b.x)/2, y:(a.y+b.y)/2};
+  }
+  if (sh.type === 'poly' && sh.points.length) {
+    const cx=sh.points.reduce((s,p)=>s+p.x,0)/sh.points.length;
+    const cz=sh.points.reduce((s,p)=>s+p.z,0)/sh.points.length;
+    return w2s(cx, cz);
+  }
+  return {x: canvas.width/2, y: canvas.height/2};
+}
+
+function startInlineEdit(idx) {
+  const sh = S.shapes[idx];
+  inlineIdx = idx;
+  const sp = shapeCenterScreen(sh);
+  inlineInput.value = sh.name;
+  inlineInput.style.left = sp.x + 'px';
+  inlineInput.style.top  = sp.y + 'px';
+  inlineInput.style.display = 'block';
+  inlineInput.focus();
+  inlineInput.select();
+}
+
+function commitInlineEdit() {
+  if (inlineIdx === null) return;
+  const sh = S.shapes[inlineIdx];
+  if (sh) {
+    const val = inlineInput.value.trim();
+    if (val && val !== sh.name) {
+      sh.name = val;
+      if (S.selShape === inlineIdx) document.getElementById('shapeName').value = val;
+      markDirty(); updateShapeList(); render();
+    }
+  }
+  inlineIdx = null;
+  inlineInput.style.display = 'none';
+}
+
+function cancelInlineEdit() {
+  inlineIdx = null;
+  inlineInput.style.display = 'none';
+}
+
+inlineInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter')  { e.preventDefault(); commitInlineEdit(); }
+  if (e.key === 'Escape') { e.preventDefault(); cancelInlineEdit(); }
+});
+inlineInput.addEventListener('blur', commitInlineEdit);
+
+
 window.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && inlineIdx !== null) { cancelInlineEdit(); return; }
   if (e.key === 'Escape' && S.drawMode) exitDrawMode();
   if ((e.key === 'Delete' || e.key === 'Backspace') && S.selShape !== null) {
     const tag = document.activeElement.tagName;
