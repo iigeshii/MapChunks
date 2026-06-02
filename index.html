@@ -67,7 +67,7 @@ header h1{font-size:1rem;color:#0969da;flex:1;white-space:nowrap;font-weight:700
 
 /* ── Canvas wrap ── */
 .canvas-wrap{flex:1;position:relative;overflow:hidden;min-width:0}
-canvas{display:block;width:100%;height:100%;cursor:crosshair}
+canvas{display:block;width:100%;height:100%;cursor:crosshair;touch-action:none}
 canvas.panning{cursor:grabbing}
 canvas.drawing{cursor:crosshair}
 
@@ -109,6 +109,22 @@ canvas.drawing{cursor:crosshair}
 .sec-title.collapsible::after{content:'▾';font-size:0.75em;color:#8c959f;transition:transform .15s}
 .sec-title.collapsible.sec-closed::after{content:'▸'}
 
+/* ── Mobile overlay ── */
+#mobOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:49}
+#mobOverlay.open{display:block}
+#btnMenu{display:none}
+
+/* ── Mobile layout ── */
+@media(max-width:700px){
+  #btnMenu{display:flex}
+  .sidebar{position:fixed;top:0;left:0;bottom:0;z-index:50;transform:translateX(-100%);transition:transform .25s;box-shadow:2px 0 16px rgba(0,0,0,.2)}
+  .sidebar.mob-open{transform:translateX(0)}
+  .tool-btn{padding:10px 2px;font-size:1.2rem}
+  .cswatch{width:28px;height:28px}
+  .field input[type="number"],.field input[type="text"],.field select{font-size:1rem;padding:6px 8px}
+  footer{font-size:0.78rem;gap:12px}
+}
+
 /* ── Footer / status ── */
 footer{background:#ffffff;border-top:1px solid #d0d7de;padding:3px 12px;font-size:0.72rem;color:#8c959f;display:flex;gap:20px;flex-shrink:0}
 footer span{font-family:monospace}
@@ -119,6 +135,7 @@ footer span b{color:#57606a}
 
 <header>
   <div class="hdr-file-ops">
+    <button class="btn" id="btnMenu" title="Menu">☰</button>
     <button class="btn" id="btnOpen">Open</button>
     <button class="btn primary" id="btnSave">Save</button>
     <button class="btn" id="btnSaveAs">Save As…</button>
@@ -340,6 +357,8 @@ footer span b{color:#57606a}
   <span id="stMode"></span>
   <span style="margin-left:auto;color:#57606a">© 2025 Gesh Giezel · Map Chunk Tool · Built with Claude</span>
 </footer>
+
+<div id="mobOverlay"></div>
 
 <script>
 // ════════════════════════════════════════════════════════════════════════════
@@ -2200,6 +2219,99 @@ function setColor(hex, _internal = false) {
     );
   }
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Mobile sidebar toggle
+// ════════════════════════════════════════════════════════════════════════════
+const sidebar    = document.querySelector('.sidebar');
+const mobOverlay = document.getElementById('mobOverlay');
+
+function setSidebarOpen(open) {
+  sidebar.classList.toggle('mob-open', open);
+  mobOverlay.classList.toggle('open', open);
+}
+
+document.getElementById('btnMenu').addEventListener('click', () =>
+  setSidebarOpen(!sidebar.classList.contains('mob-open'))
+);
+mobOverlay.addEventListener('click', () => setSidebarOpen(false));
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Touch support
+// ════════════════════════════════════════════════════════════════════════════
+let _touchActive = false;
+let _pinch = null;
+
+function fakeMouse(type, touch, button = 0) {
+  canvas.dispatchEvent(new MouseEvent(type, {
+    bubbles: true, cancelable: true,
+    clientX: touch.clientX, clientY: touch.clientY,
+    button, buttons: button === 0 ? 1 : 0,
+  }));
+}
+
+function pinchDistance(t) {
+  return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+}
+
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  setSidebarOpen(false);
+  _touchActive = true;
+  if (e.touches.length === 1) {
+    _pinch = null;
+    fakeMouse('mousedown', e.touches[0], 0);
+  } else if (e.touches.length === 2) {
+    fakeMouse('mouseleave', e.touches[0], 0);
+    const r = canvas.getBoundingClientRect();
+    _pinch = {
+      dist: pinchDistance(e.touches),
+      zoom: S.zoom,
+      midX: (e.touches[0].clientX + e.touches[1].clientX) / 2 - r.left,
+      midY: (e.touches[0].clientY + e.touches[1].clientY) / 2 - r.top,
+      cx: S.cx, cz: S.cz,
+    };
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (e.touches.length === 1 && !_pinch) {
+    fakeMouse('mousemove', e.touches[0], 0);
+  } else if (e.touches.length === 2 && _pinch) {
+    const dist    = pinchDistance(e.touches);
+    const newZoom = Math.max(0.08, Math.min(80, _pinch.zoom * dist / _pinch.dist));
+    const wx = (_pinch.midX - canvas.width  / 2) / _pinch.zoom + _pinch.cx;
+    const wz = (_pinch.midY - canvas.height / 2) / _pinch.zoom + _pinch.cz;
+    S.zoom = newZoom;
+    S.cx   = wx - (_pinch.midX - canvas.width  / 2) / S.zoom;
+    S.cz   = wz - (_pinch.midY - canvas.height / 2) / S.zoom;
+    document.getElementById('stZoom').innerHTML = `<b>Zoom:</b> ${S.zoom.toFixed(2)}px/u`;
+    render();
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  if (e.touches.length === 0) {
+    _pinch = null;
+    fakeMouse('mouseup', e.changedTouches[0], 0);
+    setTimeout(() => { _touchActive = false; }, 300);
+  } else if (e.touches.length < 2) {
+    _pinch = null;
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchcancel', e => {
+  _pinch = null;
+  fakeMouse('mouseleave', e.changedTouches[0] || { clientX:0, clientY:0 }, 0);
+  _touchActive = false;
+}, { passive: false });
+
+// Suppress browser-synthesised mouse events on touch devices so they don't double-fire
+;['mousedown','mousemove','mouseup'].forEach(type =>
+  canvas.addEventListener(type, e => { if (_touchActive && e.isTrusted) e.stopImmediatePropagation(); }, true)
+);
 
 // ════════════════════════════════════════════════════════════════════════════
 //  Init
