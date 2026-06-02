@@ -175,7 +175,7 @@ footer span b{color:#57606a}
             <button class="btn" id="btnGoToMapImg" style="flex:1">Go to</button>
             <button class="btn warn" id="btnRemoveMapImg" style="flex:1">Remove</button>
           </div>
-          <div style="font-size:0.65rem;color:#8c959f;margin-top:5px">Image is embedded in the .json file.</div>
+          <div id="mapImgSource" style="font-size:0.65rem;color:#8c959f;margin-top:5px;word-break:break-all">Image is embedded in the .json file.</div>
         </div>
         <input type="file" id="mapImgInput" accept="image/*" style="display:none">
       </div>
@@ -1626,12 +1626,14 @@ function loadData(data) {
   }
   if (Array.isArray(data.shapes)) S.shapes = data.shapes;
 
-  if (data.mapImage && data.mapImage.data) {
+  const imgSrc = data.mapImage && (data.mapImage.data || data.mapImage.url);
+  if (imgSrc) {
     S.mapImage   = data.mapImage;
     S.mapImageEl = null;
     const img = new Image();
-    img.onload = () => { S.mapImageEl = img; render(); };
-    img.src = data.mapImage.data;
+    img.onload  = () => { S.mapImageEl = img; render(); };
+    img.onerror = () => console.warn('Map image failed to load:', imgSrc);
+    img.src = imgSrc;
   } else {
     S.mapImage   = null;
     S.mapImageEl = null;
@@ -1654,12 +1656,15 @@ function updateMapImageUI() {
   document.getElementById('mapImgEmpty').style.display = has ? 'none' : '';
   document.getElementById('mapImgPanel').style.display = has ? ''     : 'none';
   if (has) {
-    document.getElementById('mapImgThumb').src         = S.mapImage.data;
-    document.getElementById('mapNwX').value            = S.mapImage.nwX;
-    document.getElementById('mapNwZ').value            = S.mapImage.nwZ;
-    document.getElementById('mapSeX').value            = S.mapImage.seX;
-    document.getElementById('mapSeZ').value            = S.mapImage.seZ;
-    document.getElementById('mapOpacity').value        = S.mapImage.opacity ?? 0.7;
+    document.getElementById('mapImgThumb').src  = S.mapImage.data || S.mapImage.url || '';
+    document.getElementById('mapNwX').value     = S.mapImage.nwX;
+    document.getElementById('mapNwZ').value     = S.mapImage.nwZ;
+    document.getElementById('mapSeX').value     = S.mapImage.seX;
+    document.getElementById('mapSeZ').value     = S.mapImage.seZ;
+    document.getElementById('mapOpacity').value = S.mapImage.opacity ?? 0.7;
+    document.getElementById('mapImgSource').textContent = S.mapImage.url && !S.mapImage.data
+      ? `Server image: ${S.mapImage.url}`
+      : 'Image embedded in .json file.';
   }
 }
 
@@ -1787,8 +1792,22 @@ async function loadPresets() {
   return Promise.all(index.map(async entry => {
     const res = await fetch(`./presets/${entry.file}`);
     if (!res.ok) throw new Error(`${entry.file}: HTTP ${res.status}`);
-    return { name: entry.name, data: await res.json() };
+    return { name: entry.name, isDefault: !!entry.default, data: await res.json() };
   }));
+}
+
+async function initDefaultPreset() {
+  try {
+    if (!presetCache) presetCache = await loadPresets();
+    const def = presetCache.find(p => p.isDefault);
+    if (def) {
+      loadData(def.data);
+      S.activePresetName = def.name;
+      updateFileState();
+    }
+  } catch (e) {
+    // fetch unavailable (file://) or no default marked — start blank
+  }
 }
 
 const presetModal = document.getElementById('presetModal');
@@ -1803,7 +1822,7 @@ async function openPresets() {
   try {
     if (!presetCache) presetCache = await loadPresets();
     listEl.innerHTML = presetCache.length
-      ? presetCache.map((p, i) => `<div class="preset-item" onclick="applyPreset(${i})">${escHtml(p.name)}</div>`).join('')
+      ? presetCache.map((p, i) => `<div class="preset-item" onclick="applyPreset(${i})">${escHtml(p.name)}${p.isDefault ? ' <span style="font-size:0.72em;color:#2da44e;font-weight:600">★ default</span>' : ''}</div>`).join('')
       : '<div class="modal-empty">No presets found in presets/index.json.</div>';
   } catch (e) {
     listEl.innerHTML = IS_LOCAL
@@ -1901,6 +1920,7 @@ updateRectDims();
 updateEllipseDims();
 updateLineDims();
 updateMapImageUI();
+initDefaultPreset();
 document.getElementById('stMode').innerHTML = IS_LOCAL
   ? '<b style="color:#2da44e">Local</b>'
   : '<b style="color:#0969da">Remote</b>';
