@@ -142,6 +142,44 @@ footer span b{color:#57606a}
         </div>
       </div>
 
+      <!-- Map Image -->
+      <div class="section">
+        <div class="sec-title">Map Image</div>
+        <div id="mapImgEmpty">
+          <div style="font-size:0.72rem;color:#8c959f;margin-bottom:6px">Overlay a screenshot on the map</div>
+          <button class="btn full-btn" id="btnLoadMapImg">Load Image…</button>
+        </div>
+        <div id="mapImgPanel" style="display:none">
+          <img id="mapImgThumb" style="width:100%;max-height:100px;object-fit:cover;border-radius:4px;margin-bottom:6px;border:1px solid #d0d7de">
+          <div style="font-size:0.65rem;color:#57606a;font-weight:600;margin-bottom:3px">NW corner (top-left of image)</div>
+          <div class="row2">
+            <div class="field"><label>X</label><input type="number" id="mapNwX" value="0"></div>
+            <div class="field"><label>Z</label><input type="number" id="mapNwZ" value="0"></div>
+          </div>
+          <div style="font-size:0.65rem;color:#57606a;font-weight:600;margin-bottom:3px">SE corner (bottom-right of image)</div>
+          <div class="row2">
+            <div class="field"><label>X</label><input type="number" id="mapSeX" value="256"></div>
+            <div class="field"><label>Z</label><input type="number" id="mapSeZ" value="256"></div>
+          </div>
+          <div class="field" style="margin-top:4px">
+            <label>Opacity</label>
+            <select id="mapOpacity">
+              <option value="0.25">25%</option>
+              <option value="0.5">50%</option>
+              <option value="0.7" selected>70%</option>
+              <option value="0.85">85%</option>
+              <option value="1">100%</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:6px">
+            <button class="btn" id="btnGoToMapImg" style="flex:1">Go to</button>
+            <button class="btn warn" id="btnRemoveMapImg" style="flex:1">Remove</button>
+          </div>
+          <div style="font-size:0.65rem;color:#8c959f;margin-top:5px">Image is embedded in the .json file.</div>
+        </div>
+        <input type="file" id="mapImgInput" accept="image/*" style="display:none">
+      </div>
+
       <!-- Add Shape -->
       <div class="section">
         <div class="sec-title" id="shapeSectionTitle">Add Shape</div>
@@ -269,6 +307,8 @@ const S = {
 
   // data
   shapes: [],
+  mapImage: null,   // { nwX, nwZ, seX, seZ, opacity, data } — serialized to JSON
+  mapImageEl: null, // HTMLImageElement — runtime only, not serialized
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -317,6 +357,8 @@ function render() {
   ctx.fillStyle = '#e8eef4';
   ctx.fillRect(0, 0, W, H);
 
+  drawMapImage(); // under grid
+
   const tl = s2w(0, 0);
   const br = s2w(W, H);
 
@@ -334,6 +376,21 @@ function render() {
 
   // Origin marker
   drawOrigin();
+}
+
+// ── Map image ─────────────────────────────────────────────────────────────
+function drawMapImage() {
+  if (!S.mapImageEl || !S.mapImage) return;
+  const { nwX, nwZ, seX, seZ, opacity } = S.mapImage;
+  if (nwX === seX || nwZ === seZ) return;
+  const s1 = w2s(nwX, nwZ);
+  const s2 = w2s(seX, seZ);
+  const pw = s2.x - s1.x, ph = s2.y - s1.y;
+  if (Math.abs(pw) < 1 || Math.abs(ph) < 1) return;
+  ctx.save();
+  ctx.globalAlpha = opacity ?? 0.7;
+  ctx.drawImage(S.mapImageEl, s1.x, s1.y, pw, ph);
+  ctx.restore();
 }
 
 // ── Grid ─────────────────────────────────────────────────────────────────
@@ -965,7 +1022,9 @@ function escHtml(s) {
 //  File management — Open / Save / Save As
 // ════════════════════════════════════════════════════════════════════════════
 function currentJson() {
-  return JSON.stringify({ version:1, view:{ cx:S.cx, cz:S.cz, zoom:S.zoom }, shapes:S.shapes }, null, 2);
+  const out = { version:1, view:{ cx:S.cx, cz:S.cz, zoom:S.zoom }, shapes:S.shapes };
+  if (S.mapImage) out.mapImage = S.mapImage;
+  return JSON.stringify(out, null, 2);
 }
 
 function markDirty() {
@@ -1093,13 +1152,120 @@ function loadData(data) {
     S.zoom = data.view.zoom  ?? 5;
   }
   if (Array.isArray(data.shapes)) S.shapes = data.shapes;
+
+  if (data.mapImage && data.mapImage.data) {
+    S.mapImage   = data.mapImage;
+    S.mapImageEl = null;
+    const img = new Image();
+    img.onload = () => { S.mapImageEl = img; render(); };
+    img.src = data.mapImage.data;
+  } else {
+    S.mapImage   = null;
+    S.mapImageEl = null;
+  }
+
   S.selShape = null;
   S.selChunk = null;
   S.dirty    = false;
   updateChunkCard();
   updateShapeList();
+  updateMapImageUI();
   render();
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Map Image
+// ════════════════════════════════════════════════════════════════════════════
+function updateMapImageUI() {
+  const has = !!S.mapImage;
+  document.getElementById('mapImgEmpty').style.display = has ? 'none' : '';
+  document.getElementById('mapImgPanel').style.display = has ? ''     : 'none';
+  if (has) {
+    document.getElementById('mapImgThumb').src         = S.mapImage.data;
+    document.getElementById('mapNwX').value            = S.mapImage.nwX;
+    document.getElementById('mapNwZ').value            = S.mapImage.nwZ;
+    document.getElementById('mapSeX').value            = S.mapImage.seX;
+    document.getElementById('mapSeZ').value            = S.mapImage.seZ;
+    document.getElementById('mapOpacity').value        = S.mapImage.opacity ?? 0.7;
+  }
+}
+
+document.getElementById('btnLoadMapImg').addEventListener('click', () =>
+  document.getElementById('mapImgInput').click()
+);
+
+document.getElementById('mapImgInput').addEventListener('change', function() {
+  const file = this.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async e => {
+    const compressed = await compressMapImage(e.target.result);
+    const tl = s2w(0, 0), br = s2w(canvas.width, canvas.height);
+    S.mapImage = {
+      nwX: Math.round(tl.x), nwZ: Math.round(tl.z),
+      seX: Math.round(br.x), seZ: Math.round(br.z),
+      opacity: 0.7,
+      data: compressed,
+    };
+    S.mapImageEl = null;
+    const img = new Image();
+    img.onload = () => { S.mapImageEl = img; render(); };
+    img.src = compressed;
+    updateMapImageUI();
+    markDirty();
+  };
+  reader.readAsDataURL(file);
+  this.value = '';
+});
+
+async function compressMapImage(dataUrl) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const maxDim = 2048;
+      let w = img.width, h = img.height;
+      if (Math.max(w, h) > maxDim) {
+        const scale = maxDim / Math.max(w, h);
+        w = Math.round(w * scale); h = Math.round(h * scale);
+      }
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(c.toDataURL('image/jpeg', 0.85));
+    };
+    img.src = dataUrl;
+  });
+}
+
+['mapNwX','mapNwZ','mapSeX','mapSeZ'].forEach(id =>
+  document.getElementById(id).addEventListener('input', () => {
+    if (!S.mapImage) return;
+    S.mapImage.nwX = +document.getElementById('mapNwX').value || 0;
+    S.mapImage.nwZ = +document.getElementById('mapNwZ').value || 0;
+    S.mapImage.seX = +document.getElementById('mapSeX').value || 0;
+    S.mapImage.seZ = +document.getElementById('mapSeZ').value || 0;
+    markDirty(); render();
+  })
+);
+
+document.getElementById('mapOpacity').addEventListener('change', () => {
+  if (!S.mapImage) return;
+  S.mapImage.opacity = +document.getElementById('mapOpacity').value;
+  markDirty(); render();
+});
+
+document.getElementById('btnGoToMapImg').addEventListener('click', () => {
+  if (!S.mapImage) return;
+  S.cx = (S.mapImage.nwX + S.mapImage.seX) / 2;
+  S.cz = (S.mapImage.nwZ + S.mapImage.seZ) / 2;
+  render();
+});
+
+document.getElementById('btnRemoveMapImg').addEventListener('click', () => {
+  if (!confirm('Remove the embedded map image?')) return;
+  S.mapImage = null; S.mapImageEl = null;
+  updateMapImageUI(); markDirty(); render();
+});
 
 // ════════════════════════════════════════════════════════════════════════════
 //  Environment detection
@@ -1230,6 +1396,7 @@ function setColor(hex) {
 // ════════════════════════════════════════════════════════════════════════════
 document.getElementById('stZoom').innerHTML = `<b>Zoom:</b> ${S.zoom.toFixed(2)}px/u`;
 updateRectDims();
+updateMapImageUI();
 document.getElementById('stMode').innerHTML = IS_LOCAL
   ? '<b style="color:#2da44e">Local</b>'
   : '<b style="color:#0969da">Remote</b>';
