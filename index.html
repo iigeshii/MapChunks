@@ -207,11 +207,11 @@ footer span b{color:#57606a}
             <option value="0">Outline only</option>
           </select>
         </div>
-        <div class="field" id="lineWidthField" style="display:none"><label>Line width</label>
+        <div class="field" id="lineWidthField" style="display:none"><label>Width (blocks)</label>
           <select id="lineWidth">
-            <option value="1">Thin</option>
-            <option value="2" selected>Medium</option>
-            <option value="4">Thick</option>
+            <option value="1" selected>1 block</option>
+            <option value="2">2 blocks</option>
+            <option value="3">3 blocks</option>
           </select>
         </div>
 
@@ -637,16 +637,15 @@ function drawShape(sh, selected) {
     ctx.setLineDash([]);
     shapeLabel(sh.name, sc.x, sc.y, sh.color);
   } else if (sh.type === 'line') {
-    const s1 = w2s(sh.x1, sh.z1), s2 = w2s(sh.x2, sh.z2);
-    const sw = sh.lineWidth || 2;
+    // Draw from center of start block to center of end block, 1 block wide
+    const s1 = w2s(sh.x1 + 0.5, sh.z1 + 0.5), s2 = w2s(sh.x2 + 0.5, sh.z2 + 0.5);
+    const bw = (sh.lineWidth || 1) * S.zoom;
     ctx.strokeStyle = sh.color;
-    ctx.lineWidth   = selected ? sw * 1.5 : sw;
-    ctx.lineCap     = 'round';
-    if (selected) ctx.setLineDash([6, 3]);
+    ctx.lineWidth   = bw;
+    ctx.lineCap     = 'square'; // fills the full block at each endpoint
+    if (selected) ctx.setLineDash([bw * 1.5, bw * 0.75]);
     ctx.beginPath(); ctx.moveTo(s1.x, s1.y); ctx.lineTo(s2.x, s2.y); ctx.stroke();
     ctx.setLineDash([]); ctx.lineCap = 'butt';
-    ctx.fillStyle = sh.color;
-    [s1, s2].forEach(s => { ctx.beginPath(); ctx.arc(s.x, s.y, sw + 1, 0, Math.PI*2); ctx.fill(); });
     shapeLabel(sh.name, (s1.x+s2.x)/2, (s1.y+s2.y)/2, sh.color);
   } else if (sh.type === 'poly') {
     if (!sh.points || sh.points.length < 2) return;
@@ -710,9 +709,11 @@ function drawPreview() {
     ctx.fill();
     ctx.stroke();
   } else if (type === 'line') {
-    const s1 = w2s(Math.round(S.drawP1.x), Math.round(S.drawP1.z));
-    const s2 = w2s(Math.round(S.drawP2.x), Math.round(S.drawP2.z));
-    ctx.lineCap = 'round';
+    const bw = (+document.getElementById('lineWidth').value || 1) * S.zoom;
+    const s1 = w2s(Math.round(S.drawP1.x) + 0.5, Math.round(S.drawP1.z) + 0.5);
+    const s2 = w2s(Math.round(S.drawP2.x) + 0.5, Math.round(S.drawP2.z) + 0.5);
+    ctx.lineWidth = bw;
+    ctx.lineCap   = 'square';
     ctx.beginPath(); ctx.moveTo(s1.x, s1.y); ctx.lineTo(s2.x, s2.y); ctx.stroke();
     ctx.lineCap = 'butt';
   } else if (type === 'poly' && S.drawPolyPoints.length > 0) {
@@ -782,8 +783,8 @@ function getHandles(sh) {
   ];
   if (sh.type === 'poly') return (sh.points || []).map((p,i) => ({id:`v${i}`, wx:p.x, wz:p.z, cur:'crosshair'}));
   if (sh.type === 'line') return [
-    {id:'p1', wx:sh.x1, wz:sh.z1, cur:'crosshair'},
-    {id:'p2', wx:sh.x2, wz:sh.z2, cur:'crosshair'},
+    {id:'p1', wx:sh.x1+0.5, wz:sh.z1+0.5, cur:'crosshair'},
+    {id:'p2', wx:sh.x2+0.5, wz:sh.z2+0.5, cur:'crosshair'},
   ];
   return [];
 }
@@ -825,8 +826,8 @@ function applyResize(sh, handleId, wx, wz) {
     const vi = parseInt(handleId.slice(1));
     if (!isNaN(vi) && vi < sh.points.length) sh.points[vi] = {x:Math.round(wx), z:Math.round(wz)};
   } else if (sh.type === 'line') {
-    if (handleId === 'p1') { sh.x1 = Math.round(wx); sh.z1 = Math.round(wz); }
-    if (handleId === 'p2') { sh.x2 = Math.round(wx); sh.z2 = Math.round(wz); }
+    if (handleId === 'p1') { sh.x1 = Math.floor(wx); sh.z1 = Math.floor(wz); }
+    if (handleId === 'p2') { sh.x2 = Math.floor(wx); sh.z2 = Math.floor(wz); }
   }
 }
 
@@ -1248,7 +1249,7 @@ function finishDraw() {
   } else if (type === 'line') {
     const x1 = Math.round(S.drawP1.x), z1 = Math.round(S.drawP1.z);
     const x2 = Math.round(S.drawP2.x), z2 = Math.round(S.drawP2.z);
-    sh = { type:'line', name, color, lineWidth: +(document.getElementById('lineWidth').value||2), x1, z1, x2, z2 };
+    sh = { type:'line', name, color, lineWidth: +(document.getElementById('lineWidth').value||1), x1, z1, x2, z2 };
     document.getElementById('slx1').value = x1; document.getElementById('slz1').value = z1;
     document.getElementById('slx2').value = x2; document.getElementById('slz2').value = z2;
   }
@@ -1394,7 +1395,7 @@ function loadShapeIntoForm(sh) {
   } else if (sh.type === 'line') {
     document.getElementById('slx1').value = sh.x1; document.getElementById('slz1').value = sh.z1;
     document.getElementById('slx2').value = sh.x2; document.getElementById('slz2').value = sh.z2;
-    document.getElementById('lineWidth').value = sh.lineWidth || 2;
+    document.getElementById('lineWidth').value = sh.lineWidth || 1;
     updateLineDims();
   }
 }
@@ -1450,12 +1451,13 @@ function shapeHit(sh, wx, wz) {
   }
   if (sh.type === 'poly') return polyHit(sh.points, wx, wz);
   if (sh.type === 'line') {
-    const dx = sh.x2-sh.x1, dz = sh.z2-sh.z1;
-    const len2 = dx*dx + dz*dz;
-    const threshold = Math.max(sh.lineWidth||2, 6) / S.zoom;
-    if (len2 === 0) return Math.hypot(wx-sh.x1, wz-sh.z1) < threshold;
-    const t = Math.max(0, Math.min(1, ((wx-sh.x1)*dx + (wz-sh.z1)*dz) / len2));
-    return Math.hypot(wx-(sh.x1+t*dx), wz-(sh.z1+t*dz)) < threshold;
+    // Use block-center endpoints; threshold = half line width + small pixel buffer
+    const cx1 = sh.x1+0.5, cz1 = sh.z1+0.5, cx2 = sh.x2+0.5, cz2 = sh.z2+0.5;
+    const dx = cx2-cx1, dz = cz2-cz1, len2 = dx*dx+dz*dz;
+    const threshold = (sh.lineWidth||1)/2 + 4/S.zoom;
+    if (len2 === 0) return Math.hypot(wx-cx1, wz-cz1) < threshold;
+    const t = Math.max(0, Math.min(1, ((wx-cx1)*dx+(wz-cz1)*dz)/len2));
+    return Math.hypot(wx-(cx1+t*dx), wz-(cz1+t*dz)) < threshold;
   }
   return false;
 }
