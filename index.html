@@ -939,6 +939,7 @@ canvas.addEventListener('mousedown', e => {
       if (S.selShape !== null && S.shapes[S.selShape]) {
         const h = hitHandle(S.shapes[S.selShape], pos.x, pos.y);
         if (h) {
+          pushUndo();
           S.resizingShape = true;
           S.dragShapeIdx  = S.selShape;
           S.dragOrigin    = JSON.parse(JSON.stringify(S.shapes[S.selShape]));
@@ -957,6 +958,7 @@ canvas.addEventListener('mousedown', e => {
       S.selShape = hit;
       if (hit !== null) {
         loadShapeIntoForm(S.shapes[hit]);
+        pushUndo();
         S.draggingShape  = true;
         S.dragShapeIdx   = hit;
         S.dragStart      = { x: w.x, z: w.z };
@@ -1212,6 +1214,18 @@ window.addEventListener('keyup', e => {
 
 window.addEventListener('keydown', e => {
   if (e.key === 'Shift') { shiftDown = true; if (S.drawing) render(); }
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'z') {
+    const tag = document.activeElement.tagName;
+    if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
+      e.preventDefault(); undo(); return;
+    }
+  }
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+    const tag = document.activeElement.tagName;
+    if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
+      e.preventDefault(); redo(); return;
+    }
+  }
   if (e.key === 'Escape' && inlineIdx !== null) { cancelInlineEdit(); return; }
   if (e.key === 'Escape' && S.drawMode) exitDrawMode();
   if ((e.key === 'Delete' || e.key === 'Backspace') && S.selShape !== null) {
@@ -1436,9 +1450,11 @@ function finishDraw() {
       (type === 'ellipse' && (sh.rx < 1 || sh.rz < 1)) ||
       (type === 'line'    && Math.hypot(sh.x2-sh.x1, sh.z2-sh.z1) < 1)) return; // too tiny
 
+  pushUndo();
   S.shapes.push(sh);
   S.selShape = S.shapes.length - 1;
-  document.getElementById('shapeName').value = sh.name; // sync field so liveUpdate reads correctly
+  pendingHistoryPush = true; // first edit on the new shape should also be undoable
+  document.getElementById('shapeName').value = sh.name;
   markDirty();
   updateShapeList();
   document.getElementById('shapeMode').textContent = `Editing: ${sh.name || 'shape'}`;
@@ -1492,6 +1508,7 @@ document.getElementById('btnAddShape').addEventListener('click', () => {
     };
   }
 
+  pushUndo();
   if (S.editMode && S.selShape !== null) {
     S.shapes[S.selShape] = sh;
   } else {
@@ -1528,6 +1545,7 @@ function resetShapeForm() {
 function loadShapeIntoForm(sh) {
   S.editMode = true;
   S.loadingForm = true;
+  pendingHistoryPush = true;
   document.getElementById('shapeMode').textContent = `Editing: ${sh.name || 'shape'}`;
   document.getElementById('btnAddShape').style.display = 'none';
   document.getElementById('btnNewShape').style.display = '';
@@ -1565,10 +1583,49 @@ function loadShapeIntoForm(sh) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+//  Undo history
+// ════════════════════════════════════════════════════════════════════════════
+const undoStack = [];
+const redoStack = [];
+const MAX_UNDO  = 50;
+let   pendingHistoryPush = true; // push once on first live-edit after selecting a shape
+
+function pushUndo() {
+  undoStack.push(JSON.stringify(S.shapes));
+  if (undoStack.length > MAX_UNDO) undoStack.shift();
+  redoStack.length = 0; // any new action kills the redo branch
+}
+
+function undo() {
+  if (!undoStack.length) return;
+  redoStack.push(JSON.stringify(S.shapes));
+  S.shapes = JSON.parse(undoStack.pop());
+  S.selShape = null;
+  pendingHistoryPush = true;
+  resetShapeForm();
+  updateShapeList();
+  markDirty();
+  render();
+}
+
+function redo() {
+  if (!redoStack.length) return;
+  undoStack.push(JSON.stringify(S.shapes));
+  S.shapes = JSON.parse(redoStack.pop());
+  S.selShape = null;
+  pendingHistoryPush = true;
+  resetShapeForm();
+  updateShapeList();
+  markDirty();
+  render();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 //  Live shape editing
 // ════════════════════════════════════════════════════════════════════════════
 function liveUpdateShape() {
   if (S.selShape === null || S.loadingForm) return;
+  if (pendingHistoryPush) { pushUndo(); pendingHistoryPush = false; }
   const sh = S.shapes[S.selShape];
   if (!sh) return;
 
@@ -1653,6 +1710,7 @@ function selectShape(i) {
 }
 
 function deleteShape(i) {
+  pushUndo();
   S.shapes.splice(i, 1);
   if (S.selShape !== null && S.selShape >= S.shapes.length) S.selShape = null;
   if (S.editMode) resetShapeForm();
