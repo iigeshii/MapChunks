@@ -115,6 +115,7 @@ footer span b{color:#57606a}
   </div>
   <div class="hdr-file-ops" style="margin-left:auto">
     <button class="btn" id="btnPresets">Presets ▾</button>
+    <button class="btn" id="btnAbout" title="About">?</button>
   </div>
   <input type="file" id="fileInput" accept=".json" style="display:none">
 </header>
@@ -289,6 +290,23 @@ footer span b{color:#57606a}
   </div>
 </div>
 
+<!-- ── About modal ── -->
+<div class="modal-bg" id="aboutModal">
+  <div class="modal" style="max-width:360px;text-align:center">
+    <h2 style="font-size:1.1rem;margin-bottom:4px">Map Chunk Tool</h2>
+    <div style="font-size:0.78rem;color:#57606a;margin-bottom:14px">A Minecraft mapping &amp; planning tool</div>
+    <div style="font-size:0.82rem;color:#1f2328;margin-bottom:6px">© 2025 <strong>Gesh Giezel</strong></div>
+    <div style="font-size:0.75rem;color:#57606a;margin-bottom:14px;line-height:1.6">
+      Interface and code generated with<br>
+      <strong>Claude</strong> by Anthropic.<br>
+      Free to use and share with attribution.
+    </div>
+    <div class="modal-footer" style="justify-content:center">
+      <button class="btn primary" id="btnAboutClose">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Preset modal ── -->
 <div class="modal-bg" id="presetModal">
   <div class="modal">
@@ -305,7 +323,8 @@ footer span b{color:#57606a}
   <span id="stChunk"><b>Chunk:</b> —</span>
   <span id="stRegion"><b>Region:</b> —</span>
   <span id="stZoom"><b>Zoom:</b> —</span>
-  <span id="stMode" style="margin-left:auto"></span>
+  <span id="stMode"></span>
+  <span style="margin-left:auto;color:#b0bac4">© 2025 Gesh Giezel · Map Chunk Tool · Built with Claude</span>
 </footer>
 
 <script>
@@ -1809,6 +1828,11 @@ async function initDefaultPreset() {
     // fetch unavailable (file://) or no default marked — start blank
   }
 }
+
+const aboutModal = document.getElementById('aboutModal');
+document.getElementById('btnAbout').addEventListener('click', () => aboutModal.classList.add('open'));
+document.getElementById('btnAboutClose').addEventListener('click', () => aboutModal.classList.remove('open'));
+aboutModal.addEventListener('click', e => { if (e.target === aboutModal) aboutModal.classList.remove('open'); });
 
 const presetModal = document.getElementById('presetModal');
 document.getElementById('btnPresets').addEventListener('click', openPresets);
