@@ -1073,6 +1073,11 @@ canvas.addEventListener('wheel', e => {
 
 window.addEventListener('keydown', e => {
   if (e.key === 'Escape' && S.drawMode) exitDrawMode();
+  if ((e.key === 'Delete' || e.key === 'Backspace') && S.selShape !== null) {
+    const tag = document.activeElement.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    deleteShape(S.selShape);
+  }
 });
 
 // ════════════════════════════════════════════════════════════════════════════
