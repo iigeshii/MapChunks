@@ -190,6 +190,7 @@ footer span b{color:#57606a}
             <option value="circle">Circle</option>
             <option value="ellipse">Ellipse</option>
             <option value="poly">Free Draw</option>
+            <option value="line">Line Segment</option>
           </select>
         </div>
         <div class="field"><label>Name</label><input type="text" id="shapeName" placeholder="My Base"></div>
@@ -198,12 +199,19 @@ footer span b{color:#57606a}
           <div class="color-swatches" id="colorSwatches"></div>
           <input type="color" id="shapeColor" value="#388bfd" style="display:none">
         </div>
-        <div class="field"><label>Fill opacity</label>
+        <div class="field" id="fillField"><label>Fill opacity</label>
           <select id="shapeFill">
             <option value="0.15">Light</option>
             <option value="0.3" selected>Medium</option>
             <option value="0.5">Dark</option>
             <option value="0">Outline only</option>
+          </select>
+        </div>
+        <div class="field" id="lineWidthField" style="display:none"><label>Line width</label>
+          <select id="lineWidth">
+            <option value="1">Thin</option>
+            <option value="2" selected>Medium</option>
+            <option value="4">Thick</option>
           </select>
         </div>
 
@@ -243,6 +251,18 @@ footer span b{color:#57606a}
         <!-- Free draw -->
         <div id="polyFields" style="display:none">
           <div id="polyInfo" style="font-size:0.72rem;color:#8c959f;text-align:center;padding:6px 0">Hold and drag on the map to trace the shape</div>
+        </div>
+        <!-- Line segment -->
+        <div id="lineFields" style="display:none">
+          <div class="row2">
+            <div class="field"><label>X1</label><input type="number" id="slx1" value="0"></div>
+            <div class="field"><label>Z1</label><input type="number" id="slz1" value="0"></div>
+          </div>
+          <div class="row2">
+            <div class="field"><label>X2</label><input type="number" id="slx2" value="32"></div>
+            <div class="field"><label>Z2</label><input type="number" id="slz2" value="32"></div>
+          </div>
+          <div id="lineDims" style="font-size:0.72rem;color:#0969da;text-align:center;font-family:monospace;margin-top:2px"></div>
         </div>
 
         <div style="display:flex;gap:6px;margin-top:6px">
@@ -616,6 +636,18 @@ function drawShape(sh, selected) {
     ctx.stroke();
     ctx.setLineDash([]);
     shapeLabel(sh.name, sc.x, sc.y, sh.color);
+  } else if (sh.type === 'line') {
+    const s1 = w2s(sh.x1, sh.z1), s2 = w2s(sh.x2, sh.z2);
+    const sw = sh.lineWidth || 2;
+    ctx.strokeStyle = sh.color;
+    ctx.lineWidth   = selected ? sw * 1.5 : sw;
+    ctx.lineCap     = 'round';
+    if (selected) ctx.setLineDash([6, 3]);
+    ctx.beginPath(); ctx.moveTo(s1.x, s1.y); ctx.lineTo(s2.x, s2.y); ctx.stroke();
+    ctx.setLineDash([]); ctx.lineCap = 'butt';
+    ctx.fillStyle = sh.color;
+    [s1, s2].forEach(s => { ctx.beginPath(); ctx.arc(s.x, s.y, sw + 1, 0, Math.PI*2); ctx.fill(); });
+    shapeLabel(sh.name, (s1.x+s2.x)/2, (s1.y+s2.y)/2, sh.color);
   } else if (sh.type === 'poly') {
     if (!sh.points || sh.points.length < 2) return;
     ctx.beginPath();
@@ -677,6 +709,12 @@ function drawPreview() {
     ctx.ellipse(sc.x, sc.y, erx, erz, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+  } else if (type === 'line') {
+    const s1 = w2s(Math.round(S.drawP1.x), Math.round(S.drawP1.z));
+    const s2 = w2s(Math.round(S.drawP2.x), Math.round(S.drawP2.z));
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(s1.x, s1.y); ctx.lineTo(s2.x, s2.y); ctx.stroke();
+    ctx.lineCap = 'butt';
   } else if (type === 'poly' && S.drawPolyPoints.length > 0) {
     ctx.beginPath();
     const p0 = w2s(S.drawPolyPoints[0].x, S.drawPolyPoints[0].z);
@@ -743,6 +781,10 @@ function getHandles(sh) {
     {id:'rz', wx:sh.cx,       wz:sh.cz-sh.rz, cur:'n-resize'},
   ];
   if (sh.type === 'poly') return (sh.points || []).map((p,i) => ({id:`v${i}`, wx:p.x, wz:p.z, cur:'crosshair'}));
+  if (sh.type === 'line') return [
+    {id:'p1', wx:sh.x1, wz:sh.z1, cur:'crosshair'},
+    {id:'p2', wx:sh.x2, wz:sh.z2, cur:'crosshair'},
+  ];
   return [];
 }
 
@@ -782,6 +824,9 @@ function applyResize(sh, handleId, wx, wz) {
   } else if (sh.type === 'poly' && handleId.startsWith('v')) {
     const vi = parseInt(handleId.slice(1));
     if (!isNaN(vi) && vi < sh.points.length) sh.points[vi] = {x:Math.round(wx), z:Math.round(wz)};
+  } else if (sh.type === 'line') {
+    if (handleId === 'p1') { sh.x1 = Math.round(wx); sh.z1 = Math.round(wz); }
+    if (handleId === 'p2') { sh.x2 = Math.round(wx); sh.z2 = Math.round(wz); }
   }
 }
 
@@ -900,7 +945,7 @@ canvas.addEventListener('mousemove', e => {
     const dz = Math.round(w.z - S.dragStart.z);
     const orig = S.dragOrigin;
     const sh   = S.shapes[S.dragShapeIdx];
-    if (sh.type === 'rect') {
+    if (sh.type === 'rect' || sh.type === 'line') {
       sh.x1 = orig.x1 + dx; sh.z1 = orig.z1 + dz;
       sh.x2 = orig.x2 + dx; sh.z2 = orig.z2 + dz;
     } else if (sh.type === 'poly') {
@@ -966,7 +1011,7 @@ canvas.addEventListener('mouseup', e => {
     canvas.style.cursor = '';
     const sh = S.shapes[S.dragShapeIdx], orig = S.dragOrigin;
     if (sh && orig) {
-      const moved = sh.type === 'rect'   ? sh.x1!==orig.x1||sh.z1!==orig.z1
+      const moved = (sh.type==='rect'||sh.type==='line') ? sh.x1!==orig.x1||sh.z1!==orig.z1
                   : sh.type === 'poly'   ? true
                   : sh.cx!==orig.cx||sh.cz!==orig.cz;
       if (moved) { markDirty(); updateShapeList(); }
@@ -1002,7 +1047,7 @@ canvas.addEventListener('mouseleave', () => {
     S.draggingShape = false;
     const sh = S.shapes[S.dragShapeIdx], orig = S.dragOrigin;
     if (sh && orig) {
-      const moved = sh.type === 'rect'   ? sh.x1!==orig.x1||sh.z1!==orig.z1
+      const moved = (sh.type==='rect'||sh.type==='line') ? sh.x1!==orig.x1||sh.z1!==orig.z1
                   : sh.type === 'poly'   ? true
                   : sh.cx!==orig.cx||sh.cz!==orig.cz;
       if (moved) { markDirty(); updateShapeList(); }
@@ -1097,10 +1142,14 @@ document.getElementById('btnGoto').addEventListener('click', () => {
 //  Shape type toggle
 // ════════════════════════════════════════════════════════════════════════════
 document.getElementById('shapeType').addEventListener('change', function() {
-  document.getElementById('rectFields').style.display    = this.value === 'rect'    ? '' : 'none';
-  document.getElementById('circleFields').style.display  = this.value === 'circle'  ? '' : 'none';
-  document.getElementById('ellipseFields').style.display = this.value === 'ellipse' ? '' : 'none';
-  document.getElementById('polyFields').style.display    = this.value === 'poly'    ? '' : 'none';
+  const v = this.value;
+  document.getElementById('rectFields').style.display    = v === 'rect'    ? '' : 'none';
+  document.getElementById('circleFields').style.display  = v === 'circle'  ? '' : 'none';
+  document.getElementById('ellipseFields').style.display = v === 'ellipse' ? '' : 'none';
+  document.getElementById('polyFields').style.display    = v === 'poly'    ? '' : 'none';
+  document.getElementById('lineFields').style.display    = v === 'line'    ? '' : 'none';
+  document.getElementById('fillField').style.display     = v === 'line'    ? 'none' : '';
+  document.getElementById('lineWidthField').style.display= v === 'line'    ? '' : 'none';
 });
 
 // ── Dimension readouts ────────────────────────────────────────────────────
@@ -1121,6 +1170,13 @@ function updateEllipseDims() {
 ['sx1','sz1','sx2','sz2'].forEach(id => document.getElementById(id).addEventListener('input', updateRectDims));
 document.getElementById('sr').addEventListener('input', updateCircleDims);
 ['serx','serz'].forEach(id => document.getElementById(id).addEventListener('input', updateEllipseDims));
+function updateLineDims() {
+  const dx = (+document.getElementById('slx2').value||0) - (+document.getElementById('slx1').value||0);
+  const dz = (+document.getElementById('slz2').value||0) - (+document.getElementById('slz1').value||0);
+  const len = Math.round(Math.hypot(dx, dz));
+  document.getElementById('lineDims').textContent = len ? `length ≈ ${len} blocks` : '';
+}
+['slx1','slz1','slx2','slz2'].forEach(id => document.getElementById(id).addEventListener('input', updateLineDims));
 
 // ════════════════════════════════════════════════════════════════════════════
 //  Draw mode
@@ -1189,11 +1245,18 @@ function finishDraw() {
     if (S.drawPolyPoints.length < 3) return;
     sh = { type:'poly', name, color, fill, points: [...S.drawPolyPoints] };
     S.drawPolyPoints = [];
+  } else if (type === 'line') {
+    const x1 = Math.round(S.drawP1.x), z1 = Math.round(S.drawP1.z);
+    const x2 = Math.round(S.drawP2.x), z2 = Math.round(S.drawP2.z);
+    sh = { type:'line', name, color, lineWidth: +(document.getElementById('lineWidth').value||2), x1, z1, x2, z2 };
+    document.getElementById('slx1').value = x1; document.getElementById('slz1').value = z1;
+    document.getElementById('slx2').value = x2; document.getElementById('slz2').value = z2;
   }
 
   if ((type === 'rect'    && (sh.x2 - sh.x1 < 1 || sh.z2 - sh.z1 < 1)) ||
       (type === 'circle'  && sh.r  < 1) ||
-      (type === 'ellipse' && (sh.rx < 1 || sh.rz < 1))) return; // too tiny
+      (type === 'ellipse' && (sh.rx < 1 || sh.rz < 1)) ||
+      (type === 'line'    && Math.hypot(sh.x2-sh.x1, sh.z2-sh.z1) < 1)) return; // too tiny
 
   S.shapes.push(sh);
   S.selShape = S.shapes.length - 1;
@@ -1234,11 +1297,18 @@ document.getElementById('btnAddShape').addEventListener('click', () => {
     };
   } else if (type === 'poly') {
     if (S.editMode && S.selShape !== null) {
-      // Update name/color/fill only — preserve existing points
       S.shapes[S.selShape] = { ...S.shapes[S.selShape], name, color, fill };
       markDirty(); updateShapeList(); render();
     }
-    return; // poly shapes must be drawn on the map
+    return;
+  } else if (type === 'line') {
+    sh = { type:'line', name, color,
+      lineWidth: +(document.getElementById('lineWidth').value || 2),
+      x1: +document.getElementById('slx1').value || 0,
+      z1: +document.getElementById('slz1').value || 0,
+      x2: +document.getElementById('slx2').value || 32,
+      z2: +document.getElementById('slz2').value || 32,
+    };
   }
 
   if (S.editMode && S.selShape !== null) {
@@ -1271,6 +1341,10 @@ function resetShapeForm() {
   document.getElementById('circleFields').style.display  = 'none';
   document.getElementById('ellipseFields').style.display = 'none';
   document.getElementById('polyFields').style.display    = 'none';
+  document.getElementById('lineFields').style.display    = 'none';
+  document.getElementById('fillField').style.display     = '';
+  document.getElementById('lineWidthField').style.display= 'none';
+  document.getElementById('lineDims').textContent        = '';
   document.getElementById('shapeType').value             = 'rect';
   updateRectDims();
   document.getElementById('circleDims').textContent   = '';
@@ -1294,6 +1368,9 @@ function loadShapeIntoForm(sh) {
   document.getElementById('circleFields').style.display  = sh.type === 'circle'  ? '' : 'none';
   document.getElementById('ellipseFields').style.display = sh.type === 'ellipse' ? '' : 'none';
   document.getElementById('polyFields').style.display    = sh.type === 'poly'    ? '' : 'none';
+  document.getElementById('lineFields').style.display    = sh.type === 'line'    ? '' : 'none';
+  document.getElementById('fillField').style.display     = sh.type === 'line'    ? 'none' : '';
+  document.getElementById('lineWidthField').style.display= sh.type === 'line'    ? '' : 'none';
 
   if (sh.type === 'rect') {
     document.getElementById('sx1').value = sh.x1;
@@ -1314,6 +1391,11 @@ function loadShapeIntoForm(sh) {
     updateEllipseDims();
   } else if (sh.type === 'poly') {
     document.getElementById('polyInfo').textContent = `${sh.points.length} vertices — drag to move`;
+  } else if (sh.type === 'line') {
+    document.getElementById('slx1').value = sh.x1; document.getElementById('slz1').value = sh.z1;
+    document.getElementById('slx2').value = sh.x2; document.getElementById('slz2').value = sh.z2;
+    document.getElementById('lineWidth').value = sh.lineWidth || 2;
+    updateLineDims();
   }
 }
 
@@ -1330,7 +1412,7 @@ function updateShapeList() {
     <div class="shape-item ${i === S.selShape ? 'sel' : ''}" onclick="selectShape(${i})">
       <div class="swatch ${sh.type === 'rect' ? 'rect' : ''}" style="background:${sh.color}"></div>
       <span class="shape-name">${escHtml(sh.name)}</span>
-      <span class="shape-type">${{rect:'▭',circle:'◯',ellipse:'⬭',poly:'✏'}[sh.type] ?? '?'}</span>
+      <span class="shape-type">${{rect:'▭',circle:'◯',ellipse:'⬭',poly:'✏',line:'╱'}[sh.type] ?? '?'}</span>
       <button class="shape-del" title="Delete" onclick="event.stopPropagation();deleteShape(${i})">✕</button>
     </div>`
   ).join('');
@@ -1367,6 +1449,14 @@ function shapeHit(sh, wx, wz) {
     return dx*dx + dz*dz <= 1;
   }
   if (sh.type === 'poly') return polyHit(sh.points, wx, wz);
+  if (sh.type === 'line') {
+    const dx = sh.x2-sh.x1, dz = sh.z2-sh.z1;
+    const len2 = dx*dx + dz*dz;
+    const threshold = Math.max(sh.lineWidth||2, 6) / S.zoom;
+    if (len2 === 0) return Math.hypot(wx-sh.x1, wz-sh.z1) < threshold;
+    const t = Math.max(0, Math.min(1, ((wx-sh.x1)*dx + (wz-sh.z1)*dz) / len2));
+    return Math.hypot(wx-(sh.x1+t*dx), wz-(sh.z1+t*dz)) < threshold;
+  }
   return false;
 }
 
@@ -1437,7 +1527,9 @@ document.getElementById('btnOpen').addEventListener('click', async () => {
     try {
       const [handle] = await window.showOpenFilePicker({
         types: [{ description: 'JSON file', accept: { 'application/json': ['.json'] } }],
+        startIn: await idbGet('lastHandle').catch(() => undefined),
       });
+      idbSet('lastHandle', handle).catch(() => {});
       const text = await (await handle.getFile()).text();
       loadData(JSON.parse(text));
       S.openFileHandle   = handle;
@@ -1500,7 +1592,9 @@ document.getElementById('btnSaveAs').addEventListener('click', async () => {
       const handle = await window.showSaveFilePicker({
         suggestedName: suggested,
         types: [{ description: 'JSON file', accept: { 'application/json': ['.json'] } }],
+        startIn: await idbGet('lastHandle').catch(() => undefined),
       });
+      idbSet('lastHandle', handle).catch(() => {});
       const w = await handle.createWritable();
       await w.write(currentJson());
       await w.close();
@@ -1640,6 +1734,35 @@ document.getElementById('btnRemoveMapImg').addEventListener('click', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
+//  Persistent last-directory (IndexedDB — survives refresh)
+// ════════════════════════════════════════════════════════════════════════════
+const _idb = new Promise((resolve, reject) => {
+  const req = indexedDB.open('mapchunk-tool', 1);
+  req.onupgradeneeded = e => e.target.result.createObjectStore('kv');
+  req.onsuccess = e => resolve(e.target.result);
+  req.onerror   = () => reject(req.error);
+});
+
+async function idbGet(key) {
+  const db  = await _idb;
+  return new Promise((res, rej) => {
+    const r = db.transaction('kv','readonly').objectStore('kv').get(key);
+    r.onsuccess = () => res(r.result);
+    r.onerror   = () => rej(r.error);
+  });
+}
+
+async function idbSet(key, val) {
+  const db = await _idb;
+  return new Promise((res, rej) => {
+    const tx = db.transaction('kv','readwrite');
+    tx.objectStore('kv').put(val, key);
+    tx.oncomplete = res;
+    tx.onerror    = () => rej(tx.error);
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 //  Environment detection
 // ════════════════════════════════════════════════════════════════════════════
 const IS_LOCAL = window.location.protocol === 'file:';
@@ -1769,6 +1892,7 @@ function setColor(hex) {
 document.getElementById('stZoom').innerHTML = `<b>Zoom:</b> ${S.zoom.toFixed(2)}px/u`;
 updateRectDims();
 updateEllipseDims();
+updateLineDims();
 updateMapImageUI();
 document.getElementById('stMode').innerHTML = IS_LOCAL
   ? '<b style="color:#2da44e">Local</b>'
