@@ -104,6 +104,11 @@ canvas.drawing{cursor:crosshair}
 .cswatch.custom-preview{border-style:dashed;border-color:#d0d7de}
 .cswatch.custom-preview.on{border-style:solid;border-color:#1f2328}
 
+/* ── Collapsible sections ── */
+.sec-title.collapsible{cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+.sec-title.collapsible::after{content:'▾';font-size:0.75em;color:#8c959f;transition:transform .15s}
+.sec-title.collapsible.sec-closed::after{content:'▸'}
+
 /* ── Footer / status ── */
 footer{background:#ffffff;border-top:1px solid #d0d7de;padding:3px 12px;font-size:0.72rem;color:#8c959f;display:flex;gap:20px;flex-shrink:0}
 footer span{font-family:monospace}
@@ -134,67 +139,10 @@ footer span b{color:#57606a}
   <div class="sidebar">
     <div class="sidebar-scroll">
 
-      <!-- Navigate -->
-      <div class="section">
-        <div class="sec-title">Navigate to Coordinate</div>
-        <div class="row2">
-          <div class="field"><label>X</label><input type="number" id="gotoX" value="0"></div>
-          <div class="field"><label>Z</label><input type="number" id="gotoZ" value="0"></div>
-        </div>
-        <button class="btn full-btn" id="btnGoto">Go to Coordinates</button>
-      </div>
-
-      <!-- Selected Chunk -->
-      <div class="section">
-        <div class="sec-title">Selected Chunk</div>
-        <div class="chunk-card" id="chunkCard">
-          <div class="chunk-empty">Click a chunk to select it</div>
-        </div>
-      </div>
-
-      <!-- Map Image -->
-      <div class="section">
-        <div class="sec-title">Map Image</div>
-        <div id="mapImgEmpty">
-          <div style="font-size:0.72rem;color:#8c959f;margin-bottom:6px">Overlay a screenshot on the map</div>
-          <button class="btn full-btn" id="btnLoadMapImg">Load Image…</button>
-        </div>
-        <div id="mapImgPanel" style="display:none">
-          <img id="mapImgThumb" style="width:100%;max-height:100px;object-fit:cover;border-radius:4px;margin-bottom:6px;border:1px solid #d0d7de">
-          <div style="font-size:0.65rem;color:#57606a;font-weight:600;margin-bottom:3px">NW corner (top-left of image)</div>
-          <div class="row2">
-            <div class="field"><label>X</label><input type="number" id="mapNwX" value="0"></div>
-            <div class="field"><label>Z</label><input type="number" id="mapNwZ" value="0"></div>
-          </div>
-          <div style="font-size:0.65rem;color:#57606a;font-weight:600;margin-bottom:3px">SE corner (bottom-right of image)</div>
-          <div class="row2">
-            <div class="field"><label>X</label><input type="number" id="mapSeX" value="256"></div>
-            <div class="field"><label>Z</label><input type="number" id="mapSeZ" value="256"></div>
-          </div>
-          <div class="field" style="margin-top:4px">
-            <label>Opacity</label>
-            <select id="mapOpacity">
-              <option value="0.25">25%</option>
-              <option value="0.5">50%</option>
-              <option value="0.7" selected>70%</option>
-              <option value="0.85">85%</option>
-              <option value="1">100%</option>
-            </select>
-          </div>
-          <div style="display:flex;gap:6px;margin-top:6px">
-            <button class="btn" id="btnGoToMapImg" style="flex:1">Go to</button>
-            <button class="btn warn" id="btnRemoveMapImg" style="flex:1">Remove</button>
-          </div>
-          <div id="mapImgSource" style="font-size:0.65rem;color:#8c959f;margin-top:5px;word-break:break-all">Image is embedded in the .json file.</div>
-        </div>
-        <input type="file" id="mapImgInput" accept="image/*" style="display:none">
-      </div>
-
       <!-- Tools -->
       <div class="section">
         <div class="sec-title">Tools</div>
         <div id="shapeMode" style="font-size:0.65rem;color:#8c959f;margin-bottom:6px">Click a shape to select it</div>
-        <!-- hidden select keeps existing JS working -->
         <select id="shapeType" style="display:none">
           <option value="rect">Rectangle</option>
           <option value="circle">Circle</option>
@@ -230,8 +178,6 @@ footer span b{color:#57606a}
             <option value="3">3 blocks</option>
           </select>
         </div>
-
-        <!-- Rect coords -->
         <div id="rectFields">
           <div class="row2">
             <div class="field"><label>X1</label><input type="number" id="sx1" value="0"></div>
@@ -243,7 +189,6 @@ footer span b{color:#57606a}
           </div>
           <div id="rectDims" style="font-size:0.72rem;color:#0969da;text-align:center;font-family:monospace;margin-top:2px"></div>
         </div>
-        <!-- Circle coords -->
         <div id="circleFields" style="display:none">
           <div class="row2">
             <div class="field"><label>CX</label><input type="number" id="scx" value="0"></div>
@@ -252,7 +197,6 @@ footer span b{color:#57606a}
           <div class="field"><label>Radius</label><input type="number" id="sr" value="16"></div>
           <div id="circleDims" style="font-size:0.72rem;color:#0969da;text-align:center;font-family:monospace;margin-top:2px"></div>
         </div>
-        <!-- Ellipse coords -->
         <div id="ellipseFields" style="display:none">
           <div class="row2">
             <div class="field"><label>CX</label><input type="number" id="secx" value="0"></div>
@@ -264,11 +208,9 @@ footer span b{color:#57606a}
           </div>
           <div id="ellipseDims" style="font-size:0.72rem;color:#0969da;text-align:center;font-family:monospace;margin-top:2px"></div>
         </div>
-        <!-- Free draw -->
         <div id="polyFields" style="display:none">
           <div id="polyInfo" style="font-size:0.72rem;color:#8c959f;text-align:center;padding:6px 0">Hold and drag on the map to trace the shape</div>
         </div>
-        <!-- Line segment -->
         <div id="lineFields" style="display:none">
           <div class="row2">
             <div class="field"><label>X1</label><input type="number" id="slx1" value="0"></div>
@@ -280,17 +222,76 @@ footer span b{color:#57606a}
           </div>
           <div id="lineDims" style="font-size:0.72rem;color:#0969da;text-align:center;font-family:monospace;margin-top:2px"></div>
         </div>
-
         <div style="margin-top:6px">
           <button class="btn primary full-btn" id="btnAddShape">Add from coords</button>
         </div>
         <button class="btn" id="btnNewShape" style="width:100%;margin-top:5px;display:none">+ New Shape</button>
       </div>
 
-      <!-- Shape List -->
+      <!-- Navigate -->
       <div class="section">
-        <div class="sec-title">Shapes</div>
-        <div id="shapeList"><div class="shapes-empty">No shapes yet</div></div>
+        <div class="sec-title">Navigate to Coordinate</div>
+        <div class="row2">
+          <div class="field"><label>X</label><input type="number" id="gotoX" value="0"></div>
+          <div class="field"><label>Z</label><input type="number" id="gotoZ" value="0"></div>
+        </div>
+        <button class="btn full-btn" id="btnGoto">Go to Coordinates</button>
+      </div>
+
+      <!-- Selected Chunk -->
+      <div class="section">
+        <div class="sec-title">Selected Chunk</div>
+        <div class="chunk-card" id="chunkCard">
+          <div class="chunk-empty">Click a chunk to select it</div>
+        </div>
+      </div>
+
+      <!-- Map Image (collapsible) -->
+      <div class="section">
+        <div class="sec-title collapsible" id="mapImgHdr">Map Image</div>
+        <div id="mapImgBody">
+          <div id="mapImgEmpty">
+            <div style="font-size:0.72rem;color:#8c959f;margin-bottom:6px">Overlay a screenshot on the map</div>
+            <button class="btn full-btn" id="btnLoadMapImg">Load Image…</button>
+          </div>
+          <div id="mapImgPanel" style="display:none">
+            <img id="mapImgThumb" style="width:100%;max-height:100px;object-fit:cover;border-radius:4px;margin-bottom:6px;border:1px solid #d0d7de">
+            <div style="font-size:0.65rem;color:#57606a;font-weight:600;margin-bottom:3px">NW corner (top-left of image)</div>
+            <div class="row2">
+              <div class="field"><label>X</label><input type="number" id="mapNwX" value="0"></div>
+              <div class="field"><label>Z</label><input type="number" id="mapNwZ" value="0"></div>
+            </div>
+            <div style="font-size:0.65rem;color:#57606a;font-weight:600;margin-bottom:3px">SE corner (bottom-right of image)</div>
+            <div class="row2">
+              <div class="field"><label>X</label><input type="number" id="mapSeX" value="256"></div>
+              <div class="field"><label>Z</label><input type="number" id="mapSeZ" value="256"></div>
+            </div>
+            <div class="field" style="margin-top:4px">
+              <label>Opacity</label>
+              <select id="mapOpacity">
+                <option value="0.25">25%</option>
+                <option value="0.5">50%</option>
+                <option value="0.7" selected>70%</option>
+                <option value="0.85">85%</option>
+                <option value="1">100%</option>
+              </select>
+            </div>
+            <div style="display:flex;gap:6px;margin-top:6px">
+              <button class="btn" id="btnGoToMapImg" style="flex:1">Go to</button>
+              <button class="btn warn" id="btnRemoveMapImg" style="flex:1">Remove</button>
+            </div>
+            <div id="mapImgSource" style="font-size:0.65rem;color:#8c959f;margin-top:5px;word-break:break-all">Image is embedded in the .json file.</div>
+          </div>
+          <input type="file" id="mapImgInput" accept="image/*" style="display:none">
+        </div>
+      </div>
+
+      <!-- Shapes list (collapsible) -->
+      <div class="section">
+        <div class="sec-title collapsible" id="shapesListHdr">Shapes</div>
+        <div id="shapesListBody">
+          <div id="shapeList"><div class="shapes-empty">No shapes yet</div></div>
+        </div>
       </div>
 
     </div><!-- /sidebar-scroll -->
@@ -2132,6 +2133,23 @@ updateRectDims();
 updateEllipseDims();
 updateLineDims();
 updateMapImageUI();
+
+// Collapsible sections
+function initCollapsible(headerId, bodyId, storageKey, defaultOpen = true) {
+  const hdr  = document.getElementById(headerId);
+  const body = document.getElementById(bodyId);
+  const open = localStorage.getItem(storageKey) !== 'false' ? defaultOpen : false;
+  if (!open) { body.style.display = 'none'; hdr.classList.add('sec-closed'); }
+  hdr.addEventListener('click', () => {
+    const closing = !hdr.classList.contains('sec-closed');
+    hdr.classList.toggle('sec-closed', closing);
+    body.style.display = closing ? 'none' : '';
+    localStorage.setItem(storageKey, closing ? 'false' : 'true');
+  });
+}
+initCollapsible('mapImgHdr',     'mapImgBody',     'sec_mapImg',    false);
+initCollapsible('shapesListHdr', 'shapesListBody', 'sec_shapesList', true);
+
 initDefaultPreset();
 document.getElementById('stMode').innerHTML = IS_LOCAL
   ? '<b style="color:#2da44e">Local</b>'
