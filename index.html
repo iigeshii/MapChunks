@@ -534,7 +534,7 @@ function drawGrid(tl, br, W, H) {
 
   // Chunk lines (only when visible enough)
   if (cpx >= 3) {
-    ctx.strokeStyle = '#b8c8d8';
+    ctx.strokeStyle = '#6a90b0';
     ctx.lineWidth   = 1;
     ctx.beginPath();
     for (let cx = cxA; cx <= cxB; cx++) {
@@ -584,20 +584,6 @@ function drawGrid(tl, br, W, H) {
     }
   }
 
-  // Region labels
-  if (rpx >= 60) {
-    const fs = Math.min(13, rpx * 0.04);
-    ctx.font          = `bold ${fs}px monospace`;
-    ctx.textAlign     = 'left';
-    ctx.textBaseline  = 'top';
-    ctx.fillStyle     = '#2d5080';
-    for (let rx = rxA; rx <= rxB; rx++) {
-      for (let rz = rzA; rz <= rzB; rz++) {
-        const s = w2s(rx * REGION, rz * REGION);
-        ctx.fillText(`r.${rx}.${rz}`, s.x + 4, s.y + 4);
-      }
-    }
-  }
 }
 
 // ── Origin ───────────────────────────────────────────────────────────────
