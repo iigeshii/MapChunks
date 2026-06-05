@@ -1229,16 +1229,39 @@ window.addEventListener('keyup', e => {
 
 window.addEventListener('keydown', e => {
   if (e.key === 'Shift') { shiftDown = true; if (S.drawing) render(); }
-  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'z') {
+  if (e.ctrlKey || e.metaKey) {
     const tag = document.activeElement.tagName;
-    if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
-      e.preventDefault(); undo(); return;
-    }
-  }
-  if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
-    const tag = document.activeElement.tagName;
-    if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
-      e.preventDefault(); redo(); return;
+    const inField = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+    if (!inField) {
+      if (!e.shiftKey && e.key === 'z') { e.preventDefault(); undo(); return; }
+      if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) { e.preventDefault(); redo(); return; }
+      if (e.key === 'c' && S.selShape !== null && S.shapes[S.selShape]) {
+        e.preventDefault();
+        clipboard = JSON.parse(JSON.stringify(S.shapes[S.selShape]));
+        return;
+      }
+      if (e.key === 'v' && clipboard) {
+        e.preventDefault();
+        const sh = JSON.parse(JSON.stringify(clipboard));
+        const OFF = 16;
+        if (sh.type === 'rect' || sh.type === 'line') {
+          sh.x1 += OFF; sh.z1 += OFF; sh.x2 += OFF; sh.z2 += OFF;
+        } else if (sh.type === 'ellipse' || sh.type === 'circle') {
+          sh.cx += OFF; sh.cz += OFF;
+        } else if (sh.type === 'poly') {
+          sh.points = sh.points.map(p => ({ x: p.x + OFF, z: p.z + OFF }));
+        }
+        pushUndo();
+        S.shapes.push(sh);
+        S.selShape = S.shapes.length - 1;
+        pendingHistoryPush = true;
+        document.getElementById('shapeName').value = sh.name;
+        document.getElementById('shapeMode').textContent = `Editing: ${sh.name || 'shape'}`;
+        updateShapeList();
+        markDirty();
+        render();
+        return;
+      }
     }
   }
   if (e.key === 'Escape' && inlineIdx !== null) { cancelInlineEdit(); return; }
@@ -1602,6 +1625,7 @@ function loadShapeIntoForm(sh) {
 const undoStack = [];
 const redoStack = [];
 const MAX_UNDO  = 50;
+let   clipboard = null;
 let   pendingHistoryPush = true; // push once on first live-edit after selecting a shape
 
 function pushUndo() {
