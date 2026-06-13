@@ -387,7 +387,8 @@ const S = {
 
   // selection
   selChunk: null,      // {cx, cz}
-  selShape: null,      // index
+  selShape: null,      // index (only set when exactly one shape is selected)
+  selShapes: new Set(), // indices of all currently-selected shapes (multi-select)
 
   // form state
   activeTool: 'pointer',
@@ -406,6 +407,16 @@ const S = {
   dragStart: null,
   dragOrigin: null,
   resizeHandle: null,
+
+  // box (marquee) select — right-click drag
+  boxSelecting: false,
+  boxStart: null, // world coords
+  boxEnd: null,   // world coords
+
+  // group drag of multi-selected shapes
+  groupDragging: false,
+  groupDragStart: null,   // world coords
+  groupDragOrigins: null, // Map<index, deep-copied shape>
 
   // data
   shapes: [],
@@ -467,8 +478,8 @@ function render() {
   drawGrid(tl, br, W, H);
 
   // Shapes (back to front, selected last)
-  S.shapes.forEach((sh, i) => { if (i !== S.selShape) drawShape(sh, false); });
-  if (S.selShape !== null && S.shapes[S.selShape]) drawShape(S.shapes[S.selShape], true);
+  S.shapes.forEach((sh, i) => { if (!S.selShapes.has(i)) drawShape(sh, false); });
+  S.shapes.forEach((sh, i) => { if (S.selShapes.has(i)) drawShape(sh, true); });
 
   // In-progress draw preview
   if (S.drawing && S.drawP1 && S.drawP2) drawPreview();
@@ -479,10 +490,13 @@ function render() {
   // Origin marker
   drawOrigin();
 
-  // Resize handles on selected shape
-  if (S.selShape !== null && S.shapes[S.selShape] && !S.drawing) {
+  // Resize handles — only when exactly one shape is selected
+  if (S.selShapes.size === 1 && S.selShape !== null && S.shapes[S.selShape] && !S.drawing) {
     drawHandles(S.shapes[S.selShape]);
   }
+
+  // Marquee selection box (right-click drag)
+  if (S.boxSelecting && S.boxStart && S.boxEnd) drawSelectionBox();
 }
 
 // ── Map image ─────────────────────────────────────────────────────────────
@@ -889,6 +903,106 @@ function drawHandles(sh) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+//  Multi-select helpers
+// ════════════════════════════════════════════════════════════════════════════
+// World-space bounding box of a shape: {x1,z1,x2,z2}
+function shapeBounds(sh) {
+  if (sh.type === 'rect' || sh.type === 'line') {
+    return {
+      x1: Math.min(sh.x1, sh.x2),     z1: Math.min(sh.z1, sh.z2),
+      x2: Math.max(sh.x1, sh.x2) + 1, z2: Math.max(sh.z1, sh.z2) + 1,
+    };
+  }
+  if (sh.type === 'circle') {
+    return { x1: sh.cx - sh.r, z1: sh.cz - sh.r, x2: sh.cx + sh.r, z2: sh.cz + sh.r };
+  }
+  if (sh.type === 'ellipse') {
+    return { x1: sh.cx - sh.rx, z1: sh.cz - sh.rz, x2: sh.cx + sh.rx, z2: sh.cz + sh.rz };
+  }
+  if (sh.type === 'poly' && sh.points?.length) {
+    const xs = sh.points.map(p => p.x), zs = sh.points.map(p => p.z);
+    return { x1: Math.min(...xs), z1: Math.min(...zs), x2: Math.max(...xs) + 1, z2: Math.max(...zs) + 1 };
+  }
+  return { x1:0, z1:0, x2:0, z2:0 };
+}
+
+function rectsOverlap(a, b) {
+  return a.x1 < b.x2 && a.x2 > b.x1 && a.z1 < b.z2 && a.z2 > b.z1;
+}
+
+// Shift a shape's geometry by (dx, dz), in place
+function offsetShape(sh, dx, dz) {
+  if (sh.type === 'rect' || sh.type === 'line') {
+    sh.x1 += dx; sh.z1 += dz; sh.x2 += dx; sh.z2 += dz;
+  } else if (sh.type === 'poly') {
+    sh.points = sh.points.map(p => ({ x: p.x + dx, z: p.z + dz }));
+  } else {
+    sh.cx += dx; sh.cz += dz;
+  }
+}
+
+// Apply an absolute (dx, dz) offset from a snapshot `orig`, writing into `sh`
+function applyOffsetFromOrigin(sh, orig, dx, dz) {
+  if (sh.type === 'rect' || sh.type === 'line') {
+    sh.x1 = orig.x1 + dx; sh.z1 = orig.z1 + dz;
+    sh.x2 = orig.x2 + dx; sh.z2 = orig.z2 + dz;
+  } else if (sh.type === 'poly') {
+    sh.points = orig.points.map(p => ({ x: p.x + dx, z: p.z + dz }));
+  } else {
+    sh.cx = orig.cx + dx; sh.cz = orig.cz + dz;
+  }
+}
+
+// Replace the current selection and sync dependent UI
+function setSelection(indices) {
+  S.selShapes = new Set(indices);
+  S.selShape  = S.selShapes.size === 1 ? [...S.selShapes][0] : null;
+  if (S.selShape !== null) {
+    loadShapeIntoForm(S.shapes[S.selShape]);
+  } else {
+    resetShapeForm();
+    if (S.selShapes.size > 1) {
+      document.getElementById('shapeMode').textContent = `${S.selShapes.size} shapes selected`;
+    }
+  }
+  updateShapeList();
+}
+
+function clearSelection() {
+  S.selShapes.clear();
+  S.selShape = null;
+  resetShapeForm();
+}
+
+function deleteSelectedShapes() {
+  if (!S.selShapes.size) return;
+  pushUndo();
+  [...S.selShapes].sort((a, b) => b - a).forEach(i => S.shapes.splice(i, 1));
+  S.selShapes.clear();
+  S.selShape = null;
+  resetShapeForm();
+  markDirty();
+  updateShapeList();
+  render();
+}
+
+function drawSelectionBox() {
+  const s1 = w2s(S.boxStart.x, S.boxStart.z);
+  const s2 = w2s(S.boxEnd.x, S.boxEnd.z);
+  const x = Math.min(s1.x, s2.x), y = Math.min(s1.y, s2.y);
+  const w = Math.abs(s2.x - s1.x), h = Math.abs(s2.y - s1.y);
+  ctx.save();
+  ctx.fillStyle   = 'rgba(9,105,218,0.12)';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = '#0969da';
+  ctx.lineWidth   = 1;
+  ctx.setLineDash([4, 3]);
+  ctx.strokeRect(x, y, w, h);
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 //  Mouse events
 // ════════════════════════════════════════════════════════════════════════════
 function canvasXY(e) {
@@ -901,12 +1015,22 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('mousedown', e => {
   const pos = canvasXY(e);
 
-  // Middle or right button → pan
-  if (e.button === 1 || e.button === 2) {
+  // Middle button → pan
+  if (e.button === 1) {
     S.panning    = true;
     S.panStart   = pos;
     S.panOrigin  = { cx: S.cx, cz: S.cz };
     canvas.classList.add('panning');
+    return;
+  }
+
+  // Right button → start marquee (box) selection
+  if (e.button === 2) {
+    if (S.drawMode) return;
+    const w = s2w(pos.x, pos.y);
+    S.boxSelecting = true;
+    S.boxStart = w;
+    S.boxEnd   = w;
     return;
   }
 
@@ -922,9 +1046,7 @@ canvas.addEventListener('mousedown', e => {
       }
       if (hit !== null) {
         exitDrawMode();
-        S.selShape = hit;
-        loadShapeIntoForm(S.shapes[hit]);
-        updateShapeList();
+        setSelection([hit]);
         render();
         return;
       }
@@ -939,8 +1061,8 @@ canvas.addEventListener('mousedown', e => {
       const w = s2w(pos.x, pos.y);
       const prevSel = S.selShape;
 
-      // 1. Resize handle on the currently-selected shape?
-      if (S.selShape !== null && S.shapes[S.selShape]) {
+      // 1. Resize handle on the currently-selected shape (only when exactly one is selected)?
+      if (S.selShapes.size === 1 && S.selShape !== null && S.shapes[S.selShape]) {
         const h = hitHandle(S.shapes[S.selShape], pos.x, pos.y);
         if (h) {
           pushUndo();
@@ -959,8 +1081,22 @@ canvas.addEventListener('mousedown', e => {
       for (let i = S.shapes.length - 1; i >= 0; i--) {
         if (shapeHit(S.shapes[i], w.x, w.z)) { hit = i; break; }
       }
-      S.selShape = hit;
+
+      // 2a. Clicked a shape that's part of a multi-selection → drag the whole group
+      if (hit !== null && S.selShapes.size > 1 && S.selShapes.has(hit)) {
+        pushUndo();
+        S.groupDragging   = true;
+        S.groupDragStart  = { x: w.x, z: w.z };
+        S.groupDragOrigins = new Map();
+        S.selShapes.forEach(idx => S.groupDragOrigins.set(idx, JSON.parse(JSON.stringify(S.shapes[idx]))));
+        canvas.style.cursor = 'grabbing';
+        render();
+        return;
+      }
+
       if (hit !== null) {
+        S.selShape  = hit;
+        S.selShapes = new Set([hit]);
         loadShapeIntoForm(S.shapes[hit]);
         pushUndo();
         S.draggingShape  = true;
@@ -971,7 +1107,7 @@ canvas.addEventListener('mousedown', e => {
         canvas.style.cursor = 'grabbing';
       } else {
         // 3. Empty space — start pan; defer chunk selection to mouseup if no drag
-        if (S.editMode) resetShapeForm();
+        clearSelection();
         S.panning       = true;
         S.panStart      = pos;
         S.panOrigin     = { cx: S.cx, cz: S.cz };
@@ -999,20 +1135,27 @@ canvas.addEventListener('mousemove', e => {
     return;
   }
 
+  if (S.groupDragging) {
+    const dx = Math.round(w.x - S.groupDragStart.x);
+    const dz = Math.round(w.z - S.groupDragStart.z);
+    S.groupDragOrigins.forEach((orig, idx) => applyOffsetFromOrigin(S.shapes[idx], orig, dx, dz));
+    render();
+    return;
+  }
+
   if (S.draggingShape) {
     const dx = Math.round(w.x - S.dragStart.x);
     const dz = Math.round(w.z - S.dragStart.z);
     const orig = S.dragOrigin;
     const sh   = S.shapes[S.dragShapeIdx];
-    if (sh.type === 'rect' || sh.type === 'line') {
-      sh.x1 = orig.x1 + dx; sh.z1 = orig.z1 + dz;
-      sh.x2 = orig.x2 + dx; sh.z2 = orig.z2 + dz;
-    } else if (sh.type === 'poly') {
-      sh.points = orig.points.map(p => ({ x: p.x + dx, z: p.z + dz }));
-    } else {
-      sh.cx = orig.cx + dx; sh.cz = orig.cz + dz;
-    }
+    applyOffsetFromOrigin(sh, orig, dx, dz);
     loadShapeIntoForm(sh);
+    render();
+    return;
+  }
+
+  if (S.boxSelecting) {
+    S.boxEnd = w;
     render();
     return;
   }
@@ -1041,8 +1184,8 @@ canvas.addEventListener('mousemove', e => {
 
   // Hover cursor
   if (!S.drawMode) {
-    // Handle proximity on selected shape takes priority
-    if (S.selShape !== null && S.shapes[S.selShape]) {
+    // Handle proximity on selected shape takes priority (only when one is selected)
+    if (S.selShapes.size === 1 && S.selShape !== null && S.shapes[S.selShape]) {
       const h = hitHandle(S.shapes[S.selShape], pos.x, pos.y);
       if (h) { canvas.style.cursor = h.cur; return; }
     }
@@ -1063,6 +1206,33 @@ canvas.addEventListener('mouseup', e => {
     const sh = S.shapes[S.dragShapeIdx], orig = S.dragOrigin;
     if (sh && orig && JSON.stringify(sh) !== JSON.stringify(orig)) { markDirty(); updateShapeList(); }
     S.dragShapeIdx = null; S.dragOrigin = null; S.resizeHandle = null;
+    render();
+    return;
+  }
+  if (S.groupDragging && e.button === 0) {
+    S.groupDragging = false;
+    canvas.style.cursor = '';
+    let moved = false;
+    S.groupDragOrigins.forEach((orig, idx) => {
+      if (JSON.stringify(S.shapes[idx]) !== JSON.stringify(orig)) moved = true;
+    });
+    if (moved) { markDirty(); updateShapeList(); }
+    S.groupDragOrigins = null; S.groupDragStart = null;
+    render();
+    return;
+  }
+  if (S.boxSelecting && e.button === 2) {
+    S.boxSelecting = false;
+    const rect = {
+      x1: Math.min(S.boxStart.x, S.boxEnd.x), z1: Math.min(S.boxStart.z, S.boxEnd.z),
+      x2: Math.max(S.boxStart.x, S.boxEnd.x), z2: Math.max(S.boxStart.z, S.boxEnd.z),
+    };
+    if (Math.hypot(rect.x2 - rect.x1, rect.z2 - rect.z1) > 0.5) {
+      const hits = [];
+      S.shapes.forEach((sh, i) => { if (rectsOverlap(shapeBounds(sh), rect)) hits.push(i); });
+      setSelection(hits);
+    }
+    S.boxStart = S.boxEnd = null;
     render();
     return;
   }
@@ -1111,8 +1281,19 @@ canvas.addEventListener('mouseup', e => {
 canvas.addEventListener('mouseleave', () => {
   if (S.panning)  { S.panning  = false; canvas.classList.remove('panning'); }
   if (S.drawing)  { S.drawing  = false; S.drawP1 = S.drawP2 = null; render(); }
+  if (S.boxSelecting) { S.boxSelecting = false; S.boxStart = S.boxEnd = null; render(); }
   S._reselected = false;
   canvas.style.cursor = '';
+  if (S.groupDragging) {
+    S.groupDragging = false;
+    let moved = false;
+    S.groupDragOrigins.forEach((orig, idx) => {
+      if (JSON.stringify(S.shapes[idx]) !== JSON.stringify(orig)) moved = true;
+    });
+    if (moved) { markDirty(); updateShapeList(); }
+    S.groupDragOrigins = null; S.groupDragStart = null;
+    render();
+  }
   if (S.resizingShape) {
     S.resizingShape = false;
     const sh = S.shapes[S.dragShapeIdx], orig = S.dragOrigin;
@@ -1221,29 +1402,24 @@ window.addEventListener('keydown', e => {
     if (!inField) {
       if (!e.shiftKey && e.key === 'z') { e.preventDefault(); undo(); return; }
       if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) { e.preventDefault(); redo(); return; }
-      if (e.key === 'c' && S.selShape !== null && S.shapes[S.selShape]) {
+      if (e.key === 'c' && S.selShapes.size > 0) {
         e.preventDefault();
-        clipboard = JSON.parse(JSON.stringify(S.shapes[S.selShape]));
+        clipboard = [...S.selShapes].map(i => JSON.parse(JSON.stringify(S.shapes[i])));
         return;
       }
-      if (e.key === 'v' && clipboard) {
+      if (e.key === 'v' && clipboard && clipboard.length) {
         e.preventDefault();
-        const sh = JSON.parse(JSON.stringify(clipboard));
         const OFF = 16;
-        if (sh.type === 'rect' || sh.type === 'line') {
-          sh.x1 += OFF; sh.z1 += OFF; sh.x2 += OFF; sh.z2 += OFF;
-        } else if (sh.type === 'ellipse' || sh.type === 'circle') {
-          sh.cx += OFF; sh.cz += OFF;
-        } else if (sh.type === 'poly') {
-          sh.points = sh.points.map(p => ({ x: p.x + OFF, z: p.z + OFF }));
-        }
         pushUndo();
-        S.shapes.push(sh);
-        S.selShape = S.shapes.length - 1;
+        const newIndices = [];
+        clipboard.forEach(orig => {
+          const sh = JSON.parse(JSON.stringify(orig));
+          offsetShape(sh, OFF, OFF);
+          S.shapes.push(sh);
+          newIndices.push(S.shapes.length - 1);
+        });
+        setSelection(newIndices);
         pendingHistoryPush = true;
-        document.getElementById('shapeName').value = sh.name;
-        document.getElementById('shapeMode').textContent = `Editing: ${sh.name || 'shape'}`;
-        updateShapeList();
         markDirty();
         render();
         return;
@@ -1252,10 +1428,26 @@ window.addEventListener('keydown', e => {
   }
   if (e.key === 'Escape' && inlineIdx !== null) { cancelInlineEdit(); return; }
   if (e.key === 'Escape' && S.drawMode) exitDrawMode();
-  if ((e.key === 'Delete' || e.key === 'Backspace') && S.selShape !== null) {
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key) && S.selShapes.size > 0) {
     const tag = document.activeElement.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-    deleteShape(S.selShape);
+    e.preventDefault();
+    const step = e.shiftKey ? CHUNK : 1;
+    let dx = 0, dz = 0;
+    if (e.key === 'ArrowUp')    dz = -step;
+    if (e.key === 'ArrowDown')  dz =  step;
+    if (e.key === 'ArrowLeft')  dx = -step;
+    if (e.key === 'ArrowRight') dx =  step;
+    pushUndo();
+    S.selShapes.forEach(idx => offsetShape(S.shapes[idx], dx, dz));
+    if (S.selShape !== null) loadShapeIntoForm(S.shapes[S.selShape]);
+    markDirty(); updateShapeList(); render();
+    return;
+  }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && S.selShapes.size > 0) {
+    const tag = document.activeElement.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    deleteSelectedShapes();
   }
 });
 
@@ -1421,6 +1613,7 @@ function exitDrawMode() {
   document.getElementById('drawBadge').classList.remove('on');
   canvas.classList.remove('drawing');
   S.selShape = null;
+  S.selShapes.clear();
   resetShapeForm();
   setActiveTool('pointer');
   render();
@@ -1476,6 +1669,7 @@ function finishDraw() {
   pushUndo();
   S.shapes.push(sh);
   S.selShape = S.shapes.length - 1;
+  S.selShapes = new Set([S.selShape]);
   pendingHistoryPush = true; // first edit on the new shape should also be undoable
   document.getElementById('shapeName').value = sh.name;
   markDirty();
@@ -1537,6 +1731,7 @@ document.getElementById('btnAddShape').addEventListener('click', () => {
   } else {
     S.shapes.push(sh);
     S.selShape = S.shapes.length - 1;
+    S.selShapes = new Set([S.selShape]);
   }
 
   markDirty();
@@ -1625,6 +1820,7 @@ function undo() {
   redoStack.push(JSON.stringify(S.shapes));
   S.shapes = JSON.parse(undoStack.pop());
   S.selShape = null;
+  S.selShapes.clear();
   pendingHistoryPush = true;
   resetShapeForm();
   updateShapeList();
@@ -1637,6 +1833,7 @@ function redo() {
   undoStack.push(JSON.stringify(S.shapes));
   S.shapes = JSON.parse(redoStack.pop());
   S.selShape = null;
+  S.selShapes.clear();
   pendingHistoryPush = true;
   resetShapeForm();
   updateShapeList();
@@ -1703,7 +1900,7 @@ function updateShapeList() {
     return;
   }
   el.innerHTML = S.shapes.map((sh, i) => `
-    <div class="shape-item ${i === S.selShape ? 'sel' : ''}" onclick="selectShape(${i})">
+    <div class="shape-item ${S.selShapes.has(i) ? 'sel' : ''}" onclick="selectShape(${i})">
       <div class="swatch ${sh.type === 'rect' ? 'rect' : ''}" style="background:${sh.color}"></div>
       <span class="shape-name">${escHtml(sh.name)}</span>
       <span class="shape-type">${{rect:'▭',circle:'⬭',ellipse:'⬭',poly:'✏',line:'╱'}[sh.type] ?? '?'}</span>
@@ -1714,6 +1911,7 @@ function updateShapeList() {
 
 function selectShape(i) {
   S.selShape = i;
+  S.selShapes = new Set([i]);
   updateShapeList();
   const sh = S.shapes[i];
   if (sh.type === 'rect') {
@@ -1736,8 +1934,12 @@ function selectShape(i) {
 function deleteShape(i) {
   pushUndo();
   S.shapes.splice(i, 1);
-  if (S.selShape !== null && S.selShape >= S.shapes.length) S.selShape = null;
-  if (S.editMode) resetShapeForm();
+  const newSel = new Set();
+  S.selShapes.forEach(idx => { if (idx !== i) newSel.add(idx > i ? idx - 1 : idx); });
+  S.selShapes = newSel;
+  S.selShape  = S.selShapes.size === 1 ? [...S.selShapes][0] : null;
+  if (S.selShape !== null) loadShapeIntoForm(S.shapes[S.selShape]);
+  else resetShapeForm();
   markDirty();
   updateShapeList();
   render();
@@ -1944,6 +2146,7 @@ function loadData(data) {
   }
 
   S.selShape = null;
+  S.selShapes.clear();
   S.selChunk = null;
   S.dirty    = false;
   updateChunkCard();
