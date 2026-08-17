@@ -1,0 +1,118 @@
+{
+  "version": 1,
+  "view": {
+    "cx": -2799.408098811193,
+    "cz": 800.5625619762986,
+    "zoom": 1.1385417316832078
+  },
+  "shapes": [
+    {
+      "type": "ellipse",
+      "name": "Cupcake Iron Farm",
+      "color": "#388bfd",
+      "fill": "0.3",
+      "cx": -3256,
+      "cz": 847,
+      "rx": 17,
+      "rz": 17
+    },
+    {
+      "type": "ellipse",
+      "name": "Central Cake Tower",
+      "color": "#388bfd",
+      "fill": "0.3",
+      "cx": -3104,
+      "cz": 798,
+      "rx": 18,
+      "rz": 18
+    },
+    {
+      "type": "ellipse",
+      "name": "Candy Lake",
+      "color": "#388bfd",
+      "fill": "0.3",
+      "cx": -2990,
+      "cz": 798,
+      "rx": 27,
+      "rz": 27
+    },
+    {
+      "type": "rect",
+      "name": "Squid Farm",
+      "color": "#0ca678",
+      "fill": "0.3",
+      "x1": -2820,
+      "z1": 1014,
+      "x2": -2801,
+      "z2": 997
+    },
+    {
+      "type": "rect",
+      "name": "Presmarine Farm",
+      "color": "#2f9e44",
+      "fill": "0.3",
+      "x1": -2932,
+      "z1": 1068,
+      "x2": -2877,
+      "z2": 1123
+    },
+    {
+      "type": "ellipse",
+      "name": "southorn point",
+      "color": "#2f9e44",
+      "fill": "0.3",
+      "cx": -3092,
+      "cz": 1031,
+      "rx": 1,
+      "rz": 1
+    },
+    {
+      "type": "ellipse",
+      "name": "east point",
+      "color": "#388bfd",
+      "fill": "0.3",
+      "cx": -3354,
+      "cz": 785,
+      "rx": 1,
+      "rz": 1
+    },
+    {
+      "type": "ellipse",
+      "name": "north point",
+      "color": "#388bfd",
+      "fill": "0.3",
+      "cx": -2992,
+      "cz": 531,
+      "rx": 1,
+      "rz": 1
+    },
+    {
+      "type": "rect",
+      "name": "Portal",
+      "color": "#7048e8",
+      "fill": "0.3",
+      "x1": -2901,
+      "z1": 860,
+      "x2": -2907,
+      "z2": 868
+    },
+    {
+      "type": "rect",
+      "name": "",
+      "color": "#388bfd",
+      "fill": "0.3",
+      "x1": -3244,
+      "z1": 835,
+      "x2": -3268,
+      "z2": 859
+    }
+  ],
+  "mapImage": {
+    "nwX": -2255,
+    "nwZ": 452,
+    "seX": -3509,
+    "seZ": 1064,
+    "opacity": 0.7,
+    "data": "data:image/jpeg;base64,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"
+  }
+}
